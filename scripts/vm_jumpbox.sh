@@ -10,7 +10,7 @@ PROJECT_ID="gke-hack-471804"
 ZONE="us-central1-a"
 VM_NAME="alloydb-jumpbox"
 SERVICE_ACCOUNT="alloydb-user-sa@${PROJECT_ID}.iam.gserviceaccount.com"
-ALLOYDB_IP="10.79.0.2"
+ALLOYDB_IP="10.79.0.8"
 ALLOYDB_PASSWORD="Admin123"
 
 # Colors for output
