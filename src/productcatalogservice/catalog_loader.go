@@ -18,11 +18,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"strings"
 
-	"cloud.google.com/go/alloydbconn"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	pb "github.com/GoogleCloudPlatform/microservices-demo/src/productcatalogservice/genproto"
@@ -34,10 +32,15 @@ func loadCatalog(catalog *pb.ListProductsResponse) error {
 	catalogMutex.Lock()
 	defer catalogMutex.Unlock()
 
-	if os.Getenv("ALLOYDB_CLUSTER_NAME") != "" {
-		return loadCatalogFromAlloyDB(catalog)
+	cloudsqlHost := os.Getenv("CLOUDSQL_HOST")
+	log.Infof("CLOUDSQL_HOST value: '%s'", cloudsqlHost)
+	
+	if cloudsqlHost != "" {
+		log.Info("Using Cloud SQL for catalog")
+		return loadCatalogFromCloudSQL(catalog)
 	}
 
+	log.Info("Using local JSON file for catalog")
 	return loadCatalogFromLocalFile(catalog)
 }
 
@@ -82,13 +85,11 @@ func getSecretPayload(project, secret, version string) (string, error) {
 	return string(result.Payload.Data), nil
 }
 
-func loadCatalogFromAlloyDB(catalog *pb.ListProductsResponse) error {
-	log.Info("loading catalog from AlloyDB...")
+func loadCatalogFromCloudSQL(catalog *pb.ListProductsResponse) error {
+	log.Info("loading catalog from Cloud SQL...")
 
 	projectID := os.Getenv("PROJECT_ID")
-	region := os.Getenv("REGION")
-	pgClusterName := os.Getenv("ALLOYDB_CLUSTER_NAME")
-	pgInstanceName := os.Getenv("ALLOYDB_INSTANCE_NAME")
+	pgHost := os.Getenv("CLOUDSQL_HOST")
 	pgDatabaseName := os.Getenv("ALLOYDB_DATABASE_NAME")
 	pgTableName := os.Getenv("ALLOYDB_TABLE_NAME")
 	pgSecretName := os.Getenv("ALLOYDB_SECRET_NAME")
@@ -98,33 +99,15 @@ func loadCatalogFromAlloyDB(catalog *pb.ListProductsResponse) error {
 		return err
 	}
 
-	dialer, err := alloydbconn.NewDialer(context.Background())
-	if err != nil {
-		log.Warnf("failed to set-up dialer connection: %v", err)
-		return err
-	}
-	cleanup := func() error { return dialer.Close() }
-	defer cleanup()
-
+	// Direct connection to Cloud SQL (like cartservice)
 	dsn := fmt.Sprintf(
-		"user=%s password=%s dbname=%s sslmode=disable",
-		"postgres", pgPassword, pgDatabaseName,
+		"host=%s user=%s password=%s dbname=%s sslmode=disable",
+		pgHost, "postgres", pgPassword, pgDatabaseName,
 	)
 
-	config, err := pgxpool.ParseConfig(dsn)
+	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
-		log.Warnf("failed to parse DSN config: %v", err)
-		return err
-	}
-
-	pgInstanceURI := fmt.Sprintf("projects/%s/locations/%s/clusters/%s/instances/%s", projectID, region, pgClusterName, pgInstanceName)
-	config.ConnConfig.DialFunc = func(ctx context.Context, _ string, _ string) (net.Conn, error) {
-		return dialer.Dial(ctx, pgInstanceURI)
-	}
-
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
-	if err != nil {
-		log.Warnf("failed to set-up pgx pool: %v", err)
+		log.Warnf("failed to connect to Cloud SQL: %v", err)
 		return err
 	}
 	defer pool.Close()
@@ -156,6 +139,8 @@ func loadCatalogFromAlloyDB(catalog *pb.ListProductsResponse) error {
 		catalog.Products = append(catalog.Products, product)
 	}
 
-	log.Info("successfully parsed product catalog from AlloyDB")
+	log.Info("successfully parsed product catalog from Cloud SQL")
 	return nil
 }
+
+
