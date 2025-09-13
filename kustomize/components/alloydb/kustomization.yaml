@@ -32,57 +32,58 @@ patches:
               - name: REDIS_ADDR
                 $patch: delete
               - name: ALLOYDB_PRIMARY_IP
-                value: ALLOYDB_PRIMARY_IP_VAL
+                value: 10.79.0.2
               - name: ALLOYDB_DATABASE_NAME
-                value: ALLOYDB_CARTS_DATABASE_NAME_VAL
+                value: carts
               - name: ALLOYDB_TABLE_NAME
-                value: ALLOYDB_CARTS_TABLE_NAME_VAL
+                value: cart_items
               - name: ALLOYDB_SECRET_NAME
-                value: ALLOYDB_SECRET_NAME_VAL
+                value: alloydb-secret
               - name: PROJECT_ID
-                value: PROJECT_ID_VAL
+                value: gke-hack-471804
 # cartservice - add the GSA annotation for the cartservice KSA
+# lets the pod authenticate to GCP/AlloyDB without storing JSON keys.
 - patch: |-
     apiVersion: v1
     kind: ServiceAccount
     metadata:
       name: cartservice
       annotations:
-        iam.gke.io/gcp-service-account: ALLOYDB_USER_GSA_ID
+        iam.gke.io/gcp-service-account: alloydb-user-sa@gke-hack-471804.iam.gserviceaccount.com
 # productcatalogservice - replace ALLOYDB environments
-- patch: |-
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: productcatalogservice
-    spec:
-      template:
-        spec:
-          containers:
-            - name: server
-              env:
-              - name: ALLOYDB_CLUSTER_NAME
-                value: ALLOYDB_CLUSTER_NAME_VAL
-              - name: ALLOYDB_INSTANCE_NAME
-                value: ALLOYDB_INSTANCE_NAME_VAL
-              - name: ALLOYDB_DATABASE_NAME
-                value: ALLOYDB_PRODUCTS_DATABASE_NAME_VAL
-              - name: ALLOYDB_TABLE_NAME
-                value: ALLOYDB_PRODUCTS_TABLE_NAME_VAL
-              - name: ALLOYDB_SECRET_NAME
-                value: ALLOYDB_SECRET_NAME_VAL
-              - name: PROJECT_ID
-                value: PROJECT_ID_VAL
-              - name: REGION
-                value: REGION_VAL
+# - patch: |-
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     metadata:
+#       name: productcatalogservice
+#     spec:
+#       template:
+#         spec:
+#           containers:
+#             - name: server
+#               env:
+#               - name: ALLOYDB_CLUSTER_NAME
+#                 value: onlineboutique-cluster
+#               - name: ALLOYDB_INSTANCE_NAME
+#                 value: onlineboutique-instance
+#               - name: ALLOYDB_DATABASE_NAME
+#                 value: products
+#               - name: ALLOYDB_TABLE_NAME
+#                 value: products
+#               - name: ALLOYDB_SECRET_NAME
+#                 value: alloydb-secret
+#               - name: PROJECT_ID
+#                 value: gke-hack-471804
+#               - name: REGION
+#                 value: us-central1
 # productcatalogservice - add the GSA annotation for the productcatalogservice KSA
-- patch: |-
-    apiVersion: v1
-    kind: ServiceAccount
-    metadata:
-      name: productcatalogservice
-      annotations:
-        iam.gke.io/gcp-service-account: ALLOYDB_USER_GSA_ID
+# - patch: |-
+#     apiVersion: v1
+#     kind: ServiceAccount
+#     metadata:
+#       name: productcatalogservice
+#       annotations:
+#         iam.gke.io/gcp-service-account: alloydb-user-sa@gke-hack-471804.iam.gserviceaccount.com
 # redis - remove the redis-cart Deployment
 - patch: |-
     apiVersion: apps/v1
@@ -97,3 +98,30 @@ patches:
     metadata:
       name: redis-cart
     $patch: delete
+#  a second container in the same Pod as productcatalogservice
+# The proxy establishes a secure, encrypted channel between your pod and the AlloyDB instance.
+# Instead of configuring Postgres with a username, password, and SSL certs, your app just connects to localhost:5432
+- patch: |- 
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: productcatalogservice
+    spec:
+      template:
+        spec:
+          containers:
+            - name: alloydb-proxy
+              image: gcr.io/alloydb-connectors/alloydb-auth-proxy:latest
+              args:
+                - "--port=5432"
+                - "projects/gke-hack-471804/locations/us-central1/clusters/onlineboutique-cluster/instances/onlineboutique-instance"
+              securityContext:
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
