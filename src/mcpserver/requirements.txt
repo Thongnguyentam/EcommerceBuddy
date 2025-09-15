@@ -1,4 +1,6 @@
-grpcio==1.74.0
-grpcio-tools==1.74.0
-protobuf==6.32.1
-setuptools==80.9.0
+grpcio==1.67.1
+grpcio-tools==1.67.1
+protobuf==5.28.2
+fastapi==0.115.4
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
