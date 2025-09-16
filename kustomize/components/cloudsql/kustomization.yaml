@@ -79,6 +79,37 @@ patches:
       name: productcatalogservice
       annotations:
         iam.gke.io/gcp-service-account: cloudsql-user-sa-private@gke-hack-471804.iam.gserviceaccount.com
+
+# checkoutservice - add Cloud SQL environment variables for order history
+- patch: |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: checkoutservice
+    spec:
+      template:
+        spec:
+          containers:
+            - name: server
+              env:
+              - name: CLOUDSQL_HOST
+                value: 10.103.0.3
+              - name: ALLOYDB_DATABASE_NAME
+                value: orders
+              - name: ALLOYDB_SECRET_NAME
+                value: cloudsql-secret-private
+              - name: PROJECT_ID
+                value: gke-hack-471804
+
+# checkoutservice - add the GSA annotation for the checkoutservice KSA  
+- patch: |-
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: checkoutservice
+      annotations:
+        iam.gke.io/gcp-service-account: cloudsql-user-sa-private@gke-hack-471804.iam.gserviceaccount.com
+
 # redis - remove the redis-cart Deployment
 - patch: |-
     apiVersion: apps/v1
@@ -86,6 +117,7 @@ patches:
     metadata:
       name: redis-cart
     $patch: delete
+
 # redis - remove the redis-cart Service
 - patch: |-
     apiVersion: v1
@@ -93,6 +125,7 @@ patches:
     metadata:
       name: redis-cart
     $patch: delete
+
 # productcatalogservice - use custom image with Cloud SQL connection code
 - patch: |-
     apiVersion: apps/v1
@@ -104,4 +137,17 @@ patches:
         spec:
           containers:
           - name: server
-            image: gcr.io/gke-hack-471804/productcatalogservice-custom:v2 
+            image: gcr.io/gke-hack-471804/productcatalogservice-custom:v2
+
+# checkoutservice - use custom image with order history persistence
+- patch: |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: checkoutservice
+    spec:
+      template:
+        spec:
+          containers:
+          - name: server
+            image: gcr.io/gke-hack-471804/checkoutservice-orders:latest 

@@ -29,6 +29,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/internal/database"
+	"github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/internal/services"
 	pb "github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/genproto"
 	money "github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/money"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -81,6 +83,10 @@ type checkoutService struct {
 
 	paymentSvcAddr string
 	paymentSvcConn *grpc.ClientConn
+
+	// New: Database and services
+	dbConn       *database.Connection
+	orderService *services.OrderService
 }
 
 func main() {
@@ -120,6 +126,12 @@ func main() {
 	mustConnGRPC(ctx, &svc.emailSvcConn, svc.emailSvcAddr)
 	mustConnGRPC(ctx, &svc.paymentSvcConn, svc.paymentSvcAddr)
 
+	// Initialize database connection and services
+	if err := svc.initDatabase(); err != nil {
+		log.Fatalf("failed to initialize database: %+v", err)
+	}
+	defer svc.dbConn.Close()
+
 	log.Infof("service config: %+v", svc)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
@@ -143,6 +155,22 @@ func main() {
 	log.Infof("starting to listen on tcp: %q", lis.Addr().String())
 	err = srv.Serve(lis)
 	log.Fatal(err)
+}
+
+// initDatabase initializes the database connection and services
+func (cs *checkoutService) initDatabase() error {
+	// Create database connection
+	cs.dbConn = database.NewConnection(log)
+	
+	// Connect to database
+	if err := cs.dbConn.Connect(); err != nil {
+		return fmt.Errorf("failed to connect to database: %v", err)
+	}
+
+	// Initialize order service
+	cs.orderService = services.NewOrderService(cs.dbConn, log)
+
+	return nil
 }
 
 func initStats() {
@@ -267,6 +295,14 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 		ShippingCost:       prep.shippingCostLocalized,
 		ShippingAddress:    req.Address,
 		Items:              prep.orderItems,
+	}
+
+	// *** NEW: Persist order using the order service ***
+	if cs.orderService != nil {
+		if err := cs.orderService.SaveOrder(orderResult, req.Email, req.UserId, &total); err != nil {
+			log.Warnf("failed to save order to database: %+v", err)
+			// Don't fail the order if database save fails (graceful degradation)
+		}
 	}
 
 	if err := cs.sendOrderConfirmation(ctx, req.Email, orderResult); err != nil {

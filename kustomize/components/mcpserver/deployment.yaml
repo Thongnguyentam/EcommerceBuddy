@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcpserver
+  labels:
+    app: mcpserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcpserver
+  template:
+    metadata:
+      labels:
+        app: mcpserver
+    spec:
+      serviceAccountName: mcpserver
+      containers:
+      - name: server
+        image: gcr.io/gke-hack-471804/mcpserver:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: CART_SERVICE_HOST
+          value: "cartservice:7070"
+        - name: PRODUCT_SERVICE_HOST
+          value: "productcatalogservice:3550"
+        - name: MCP_SERVER_PORT
+          value: "8080"
+        - name: LOG_LEVEL
+          value: "INFO"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcpserver
+  annotations:
+    iam.gke.io/gcp-service-account: alloydb-user-sa@gke-hack-471804.iam.gserviceaccount.com 

@@ -338,3 +338,70 @@ Response: "I found 5 outdoor products under $50: Ceramic Plant Pot ($15.99), Cot
 5. **Extensibility**: Easy to add new tools and capabilities
 
 This plan provides a comprehensive approach to creating MCP servers that bridge AI assistants with your Online Boutique microservices, enabling powerful AI-driven shopping experiences! 🛍️🤖 
+
+---
+
+## 🤝 Integrating Google Agent Kit with MCP
+
+### What is Google Agent Kit (at a glance)
+- A toolkit to build agentic workflows with Google AI (Gemini) and connect tools reliably.
+- Complements MCP by providing orchestration, planning, memory, and tool routing.
+
+### Integration Models
+- MCP-first: MCP Server exposes tools; Agent Kit consumes them as external tools.
+- AgentKit-first: Agent Kit hosts tools; MCP Server proxies/selects a subset to expose to IDEs/assistants.
+
+### Recommended for Online Boutique
+- Keep MCP Server as a stable internal API surface for cart and product tools.
+- Use Agent Kit to orchestrate complex user intents (multi-step plans), calling MCP tools as needed.
+
+### High-level Wiring
+1. Deploy MCP Server inside cluster (`mcp-tools` namespace recommended).
+2. Expose internal Service `mcpserver` (ClusterIP) on port 8080.
+3. Agent Kit runtime (can be in-cluster or external) is configured with:
+   - MCP endpoint: `mcpserver.mcp-tools.svc.cluster.local:8080` (HTTP/gRPC depending on your MCP transport).
+   - Tool schemas: Cart tools (add_to_cart, get_cart_contents, clear_cart) and Product tools (search, details...).
+   - Auth: Service Account with Workload Identity to access Secret Manager and Cloud SQL (if needed).
+
+### Auth & Security
+- Use a dedicated GSA (e.g., `mcp-agent-sa@gke-hack-471804.iam.gserviceaccount.com`).
+- Bind Workload Identity to KSA (e.g., `mcpserver` in `mcp-tools` namespace).
+- Grant least-privilege roles:
+  - `roles/secretmanager.secretAccessor` (only if MCP tools read secrets)
+  - `roles/cloudsql.client` (if MCP server accesses DB directly)
+  - Optional: `roles/monitoring.metricWriter`, `roles/logging.logWriter`
+
+### Config and Deployment Notes
+- ConfigMap entries for Agent Kit:
+  - `MCP_ENDPOINT`: `http://mcpserver.mcp-tools.svc.cluster.local:8080`
+  - `ENABLE_TOOL_ROUTING`: `true`
+  - `ENABLE_PLANNING`: `true`
+- Secret references from Secret Manager for any API keys or DB creds (avoid plaintext).
+- NetworkPolicy: allow Agent Kit pods to reach `mcpserver` and boutique services only.
+
+### Example: Agent Kit calling MCP tool
+```python
+# pseudo-code; Agent Kit registers an MCP tool provider
+from agentkit import Agent, ToolRegistry
+from mcp_sdk import MCPClient
+
+mcp = MCPClient(base_url="http://mcpserver.mcp-tools.svc.cluster.local:8080")
+registry = ToolRegistry()
+
+# Register cart tools exposed by MCP server
+registry.register(mcp.tool("add_to_cart"))
+registry.register(mcp.tool("get_cart_contents"))
+
+agent = Agent(tools=registry.all())
+response = agent.run("Add 2 vintage cameras to my cart and show my cart")
+print(response)
+```
+
+### Observability
+- Expose Prometheus metrics from MCP server and Agent Kit.
+- Emit tool-call logs with correlation IDs for cross-service tracing.
+
+### Rollout Strategy
+- Start with read-only tools (e.g., `get_cart_contents`, `search_products`).
+- Gradually enable mutating tools (`add_to_cart`, `clear_cart`) behind feature flags.
+- Add integration tests that simulate end-to-end agent flows. 

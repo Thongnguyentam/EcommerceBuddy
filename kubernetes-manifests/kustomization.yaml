@@ -31,7 +31,8 @@ components:
 # - ../kustomize/components/google-cloud-operations
 # - ../kustomize/components/memorystore
 # - ../kustomize/components/network-policies
-- ../kustomize/components/alloydb
+- ../kustomize/components/cloudsql
+- ../kustomize/components/mcpserver
 # - ../kustomize/components/shopping-assistant
 # - ../kustomize/components/spanner
 # - ../kustomize/components/container-images-tag
