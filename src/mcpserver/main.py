@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """
-Online Boutique MCP Server
+Online Boutique Unified MCP Server
 
-Exposes cart and product catalog operations as MCP (Model Context Protocol) tools
-for integration with AI assistants and Google Agent Kit.
+This server acts as a centralized gateway that exposes all relevant microservice 
+operations (e.g., cart, product catalog, reviews, currency) as a unified set of 
+MCP (Model Context Protocol) tools.
+
+Architecture:
+- Centralized Gateway: Provides a single endpoint for multiple AI agents or assistants. 
+  This simplifies agent logic, as they don't need to connect to multiple servers 
+  for cross-domain tasks (like searching for a product and then adding it to the cart).
+- Unified Tool Schema: All available tools across the microservices are discoverable
+  from a single `/tools/schema` endpoint.
+
+This approach is designed for general-purpose shopping assistants that require 
+access to a wide range of functionalities.
 """
 
 import os
@@ -17,12 +28,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from tools.cart_tool import CartTools
 from tools.product_tools import ProductTools
 from tools.review_tools import ReviewTools
+from tools.currency_tools import CurrencyTools
 from clients.cart_client import CartServiceClient
 from clients.product_client import ProductCatalogServiceClient
 from clients.review_client import ReviewServiceClient
+from clients.currency_client import CurrencyServiceClient
 
 # Import routers
-from routers import cart_router, product_catalog_router, review_router
+from routers import cart_router, product_catalog_router, review_router, currency_router
 
 
 # Configure logging
@@ -33,15 +46,17 @@ logger = logging.getLogger(__name__)
 cart_client: CartServiceClient = None
 product_client: ProductCatalogServiceClient = None
 review_client: ReviewServiceClient = None
+currency_client: CurrencyServiceClient = None
 cart_tools: CartTools = None
 product_tools: ProductTools = None
 review_tools: ReviewTools = None
+currency_tools: CurrencyTools = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - startup and shutdown."""
-    global cart_client, product_client, review_client, cart_tools, product_tools, review_tools
+    global cart_client, product_client, review_client, currency_client, cart_tools, product_tools, review_tools, currency_tools
     
     # Startup
     logger.info("🚀 Starting MCP Server...")
@@ -50,24 +65,29 @@ async def lifespan(app: FastAPI):
     cart_host = os.getenv("CART_SERVICE_HOST", "cartservice:7070")
     product_host = os.getenv("PRODUCT_SERVICE_HOST", "productcatalogservice:3550")
     review_host = os.getenv("REVIEW_SERVICE_HOST", "reviewservice:8080")
+    currency_host = os.getenv("CURRENCY_SERVICE_HOST", "currencyservice:7000")
     
     cart_client = CartServiceClient(host=cart_host)
     product_client = ProductCatalogServiceClient(host=product_host)
     review_client = ReviewServiceClient(host=review_host)
+    currency_client = CurrencyServiceClient(address=currency_host)
     
     # Initialize tools
     cart_tools = CartTools(client=cart_client)
     product_tools = ProductTools(client=product_client)
     review_tools = ReviewTools(client=review_client)
+    currency_tools = CurrencyTools(client=currency_client)
     
     # Set tools in routers
     cart_router.set_cart_tools(cart_tools)
     product_catalog_router.set_product_tools(product_tools)
     review_router.set_review_tools(review_tools)
+    currency_router.set_currency_tools(currency_tools)
     
     logger.info(f"✅ Connected to cartservice at {cart_host}")
     logger.info(f"✅ Connected to productcatalogservice at {product_host}")
     logger.info(f"✅ Connected to reviewservice at {review_host}")
+    logger.info(f"✅ Connected to currencyservice at {currency_host}")
     
     yield
     
@@ -79,6 +99,8 @@ async def lifespan(app: FastAPI):
         product_client.close()
     if review_client:
         review_client.close()
+    if currency_client:
+        currency_client.close()
 
 
 # Create FastAPI app
@@ -102,6 +124,7 @@ app.add_middleware(
 app.include_router(cart_router.router)
 app.include_router(product_catalog_router.router)
 app.include_router(review_router.router)
+app.include_router(currency_router.router)
 
 
 # Health check endpoint
@@ -233,6 +256,37 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "product_id": {"type": "string", "description": "Product ID"}
                 },
                 "endpoint": "/tools/reviews/summary"
+            },
+            {
+                "name": "get_supported_currencies",
+                "description": "Get list of all supported currency codes",
+                "parameters": {},
+                "endpoint": "/currency/supported-currencies"
+            },
+            {
+                "name": "convert_currency",
+                "description": "Convert currency from one type to another",
+                "parameters": {
+                    "from_currency": {"type": "string", "description": "Source currency code (e.g., 'USD')"},
+                    "to_currency": {"type": "string", "description": "Target currency code (e.g., 'EUR')"},
+                    "amount": {"type": "number", "description": "Amount to convert as decimal"}
+                },
+                "endpoint": "/currency/convert"
+            },
+            {
+                "name": "get_exchange_rates",
+                "description": "Get current exchange rates for all supported currencies",
+                "parameters": {},
+                "endpoint": "/currency/exchange-rates"
+            },
+            {
+                "name": "format_money",
+                "description": "Format money amount with currency symbol",
+                "parameters": {
+                    "amount": {"type": "number", "description": "Amount to format"},
+                    "currency_code": {"type": "string", "description": "Currency code (e.g., 'USD')"}
+                },
+                "endpoint": "/currency/format-money"
             }
         ]
     }

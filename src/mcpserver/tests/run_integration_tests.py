@@ -10,7 +10,7 @@ This script will:
 Usage:
     python run_integration_tests.py [test_name]
     
-    test_name can be: product, cart, review, all (default: all)
+    test_name can be: product, cart, review, currency, all (default: all)
 """
 
 import subprocess
@@ -39,6 +39,12 @@ PORT_FORWARDS = {
         'local_port': 8082,
         'service_port': 8080,
         'command': ['kubectl', 'port-forward', 'svc/reviewservice', '8082:8080']
+    },
+    'currency': {
+        'service': 'currencyservice',
+        'local_port': 7000,
+        'service_port': 7000,
+        'command': ['kubectl', 'port-forward', 'svc/currencyservice', '7000:7000']
     }
 }
 
@@ -63,6 +69,11 @@ TESTS = {
         'script': 'test_review_integration.py',
         'description': 'Review Service Unit Test',
         'requires': []  # No port forwards needed for unit tests
+    },
+    'currency': {
+        'script': 'test_currency_real_integration.py',
+        'description': 'Currency Service Integration Test (Real Conversions)',
+        'requires': ['currency']
     }
 }
 
