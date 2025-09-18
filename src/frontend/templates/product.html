@@ -24,14 +24,14 @@
 
 <main role="main">
   <div class="h-product container">
-    <div class="row">
+    <!-- Row 1: Image + Primary Product Info -->
+    <div class="row align-items-start">
       <div class="col-md-6">
-        <img class="product-image" alt="" src="{{ $.baseUrl }}{{$.product.Item.Picture}}" />
+        <img class="product-thumbnail" src="{{ $.baseUrl }}{{$.product.Item.Picture}}" alt="{{ $.product.Item.Name }}" />
       </div>
-      <div class="product-info col-md-5">
+      <div class="product-info col-md-6">
         <div class="product-wrapper">
-
-          <h2>{{ $.product.Item.Name }}</h2>
+          <h2 class="mb-2">{{ $.product.Item.Name }}</h2>
           <p class="product-price">{{ renderMoney $.product.Price }}</p>
           <p>{{ $.product.Item.Description }}</p>
 
@@ -68,6 +68,131 @@
             </div>
             <button type="submit" class="cymbal-button-primary">Add To Cart</button>
           </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Reviews Section -->
+    <div class="row mt-4">
+      <div class="col-12">
+        <div class="reviews-section">
+          <h3>Customer Reviews</h3>
+          
+          <!-- Review Summary -->
+          {{ if $.reviewSummary }}
+          <div class="review-summary mb-4">
+            <div class="row">
+              <div class="col-md-6">
+                <h4>{{ $.reviewSummary.AverageRating }} out of 5 stars</h4>
+                <div class="star-rating">
+                  ★★★★★
+                </div>
+                <p>{{ $.reviewSummary.TotalReviews }} total reviews</p>
+              </div>
+            </div>
+          </div>
+          {{ end }}
+
+          <!-- Add/Edit Review Form -->
+          {{ if $.userReview }}
+            <!-- Edit existing review -->
+            <div class="review-form mb-4">
+              <h4>Edit Your Review</h4>
+              <form method="POST" action="{{ $.baseUrl }}/review/{{ $.userReview.Id }}">
+                <input type="hidden" name="product_id" value="{{ $.product.Item.Id }}" />
+                <div class="form-group mb-3">
+                  <label for="rating">Rating:</label>
+                  <select name="rating" id="rating" class="form-control" required>
+                    <option value="1" {{ if eq $.userReview.Rating 1 }}selected{{ end }}>1 Star</option>
+                    <option value="2" {{ if eq $.userReview.Rating 2 }}selected{{ end }}>2 Stars</option>
+                    <option value="3" {{ if eq $.userReview.Rating 3 }}selected{{ end }}>3 Stars</option>
+                    <option value="4" {{ if eq $.userReview.Rating 4 }}selected{{ end }}>4 Stars</option>
+                    <option value="5" {{ if eq $.userReview.Rating 5 }}selected{{ end }}>5 Stars</option>
+                  </select>
+                </div>
+                <div class="form-group mb-3">
+                  <label for="review_text">Review:</label>
+                  <textarea name="review_text" id="review_text" class="form-control" rows="4" required>{{ $.userReview.ReviewText }}</textarea>
+                </div>
+                <div class="review-buttons d-flex align-items-center justify-content-end">
+                  <button type="submit" class="cymbal-button-primary review-button me-2">Update Review</button>
+                  <button type="button" class="cymbal-button-danger review-button" onclick="deleteReview('{{ $.userReview.Id }}', '{{ $.product.Item.Id }}')">Delete Review</button>
+                </div>
+              </form>
+              
+              <script>
+              function deleteReview(reviewId, productId) {
+                if (confirm('Are you sure you want to delete your review?')) {
+                  const form = document.createElement('form');
+                  form.method = 'POST';
+                  form.action = '{{ $.baseUrl }}/review/' + reviewId + '/delete';
+                  
+                  const input = document.createElement('input');
+                  input.type = 'hidden';
+                  input.name = 'product_id';
+                  input.value = productId;
+                  form.appendChild(input);
+                  
+                  document.body.appendChild(form);
+                  form.submit();
+                }
+              }
+              </script>
+            </div>
+          {{ else }}
+            <!-- Add new review -->
+            <div class="review-form mb-4">
+              <h4>Write a Review</h4>
+              <form method="POST" action="{{ $.baseUrl }}/review">
+                <input type="hidden" name="product_id" value="{{ $.product.Item.Id }}" />
+                <div class="form-group mb-3">
+                  <label for="rating">Rating:</label>
+                  <select name="rating" id="rating" class="form-control" required>
+                    <option value="">Select a rating</option>
+                    <option value="1">1 Star</option>
+                    <option value="2">2 Stars</option>
+                    <option value="3">3 Stars</option>
+                    <option value="4">4 Stars</option>
+                    <option value="5">5 Stars</option>
+                  </select>
+                </div>
+                <div class="form-group mb-3">
+                  <label for="review_text">Review:</label>
+                  <textarea name="review_text" id="review_text" class="form-control" rows="4" placeholder="Share your thoughts about this product..." required></textarea>
+                </div>
+                <button type="submit" class="cymbal-button-primary review-button">Submit Review</button>
+              </form>
+            </div>
+          {{ end }}
+
+          <!-- Display Reviews -->
+          <div class="reviews-list">
+            <h4>All Reviews</h4>
+            {{ if $.reviews }}
+              {{ range $.reviews }}
+              <div class="review-item border-bottom pb-3 mb-3">
+                <div class="review-header d-flex justify-content-between">
+                  <div>
+                    <strong>User: {{ .UserId }}</strong>
+                    <div class="star-rating">
+                      <span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span><span class="star filled">★</span>
+                    </div>
+                  </div>
+                  <small class="text-muted">
+                    {{ if .CreatedAt }}
+                      {{ formatTimestamp .CreatedAt }}
+                    {{ end }}
+                  </small>
+                </div>
+                <div class="review-text mt-2">
+                  <p>{{ .ReviewText }}</p>
+                </div>
+              </div>
+              {{ end }}
+            {{ else }}
+              <p>No reviews yet. Be the first to review this product!</p>
+            {{ end }}
+          </div>
         </div>
       </div>
     </div>

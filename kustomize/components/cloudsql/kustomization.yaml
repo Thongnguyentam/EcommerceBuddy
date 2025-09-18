@@ -151,3 +151,33 @@ patches:
           containers:
           - name: server
             image: gcr.io/gke-hack-471804/checkoutservice-orders:latest 
+
+# reviewservice - add Cloud SQL environment variables
+- patch: |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: reviewservice
+    spec:
+      template:
+        spec:
+          containers:
+            - name: server
+              env:
+              - name: CLOUDSQL_HOST
+                value: 10.103.0.3
+              - name: ALLOYDB_DATABASE_NAME
+                value: reviews
+              - name: ALLOYDB_SECRET_NAME
+                value: cloudsql-secret-private
+              - name: PROJECT_ID
+                value: gke-hack-471804
+
+# reviewservice - add the GSA annotation for the reviewservice KSA
+- patch: |-
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: reviewservice
+      annotations:
+        iam.gke.io/gcp-service-account: cloudsql-user-sa-private@gke-hack-471804.iam.gserviceaccount.com 

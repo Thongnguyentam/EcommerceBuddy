@@ -125,3 +125,82 @@ func (fe *frontendServer) getAd(ctx context.Context, ctxKeys []string) ([]*pb.Ad
 	})
 	return resp.GetAds(), errors.Wrap(err, "failed to get ads")
 }
+
+// Review service methods
+func (fe *frontendServer) getProductReviews(ctx context.Context, productID string, limit, offset int32) ([]*pb.Review, error) {
+	resp, err := pb.NewReviewServiceClient(fe.reviewSvcConn).GetProductReviews(ctx, &pb.GetProductReviewsRequest{
+		ProductId: productID,
+		Limit:     limit,
+		Offset:    offset,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get product reviews")
+	}
+	return resp.GetReviews(), nil
+}
+
+func (fe *frontendServer) getProductReviewSummary(ctx context.Context, productID string) (*pb.ProductReviewSummary, error) {
+	resp, err := pb.NewReviewServiceClient(fe.reviewSvcConn).GetProductReviewSummary(ctx, &pb.GetProductReviewSummaryRequest{
+		ProductId: productID,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get product review summary")
+	}
+	return resp, nil
+}
+
+func (fe *frontendServer) createReview(ctx context.Context, userID, productID string, rating int32, reviewText string) (*pb.Review, error) {
+	resp, err := pb.NewReviewServiceClient(fe.reviewSvcConn).CreateReview(ctx, &pb.CreateReviewRequest{
+		UserId:     userID,
+		ProductId:  productID,
+		Rating:     rating,
+		ReviewText: reviewText,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create review")
+	}
+	if !resp.Success {
+		return nil, errors.New(resp.Message)
+	}
+	return resp.Review, nil
+}
+
+func (fe *frontendServer) updateReview(ctx context.Context, reviewID int32, rating int32, reviewText string) (*pb.Review, error) {
+	resp, err := pb.NewReviewServiceClient(fe.reviewSvcConn).UpdateReview(ctx, &pb.UpdateReviewRequest{
+		ReviewId:   reviewID,
+		Rating:     rating,
+		ReviewText: reviewText,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to update review")
+	}
+	if !resp.Success {
+		return nil, errors.New(resp.Message)
+	}
+	return resp.Review, nil
+}
+
+func (fe *frontendServer) deleteReview(ctx context.Context, reviewID int32) error {
+	resp, err := pb.NewReviewServiceClient(fe.reviewSvcConn).DeleteReview(ctx, &pb.DeleteReviewRequest{
+		ReviewId: reviewID,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to delete review")
+	}
+	if !resp.Success {
+		return errors.New(resp.Message)
+	}
+	return nil
+}
+
+func (fe *frontendServer) getUserReviews(ctx context.Context, userID string, limit, offset int32) ([]*pb.Review, error) {
+	resp, err := pb.NewReviewServiceClient(fe.reviewSvcConn).GetUserReviews(ctx, &pb.GetUserReviewsRequest{
+		UserId: userID,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get user reviews")
+	}
+	return resp.GetReviews(), nil
+}

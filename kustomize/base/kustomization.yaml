@@ -21,8 +21,9 @@ resources:
 - currencyservice.yaml
 - emailservice.yaml
 - frontend.yaml
-- loadgenerator.yaml
+# - loadgenerator.yaml  # Disabled for production use
 - paymentservice.yaml
 - productcatalogservice.yaml
 - recommendationservice.yaml
+- reviewservice.yaml
 - shippingservice.yaml

@@ -29,6 +29,7 @@ docker push gcr.io/gke-hack-471804/mcpserver:latest
 ```
 
 ```shell
+gcloud compute ssh alloydb-jumpbox --zone=us-central1-a
 PGPASSWORD='Admin123' psql -h 10.103.0.3 -U postgres -c '\l'
 ```
                                                                 List of databases
@@ -46,3 +47,35 @@ PGPASSWORD='Admin123' psql -h 10.103.0.3 -U postgres -c '\l'
 (7 rows)
 
 thong@alloydb-jumpbox:~$ 
+
+
+```
+docker build -t reviewservice .
+docker tag reviewservice gcr.io/gke-hack-471804/reviewservice:latest
+docker push gcr.io/gke-hack-471804/reviewservice:latest
+```
+
+
+
+```
+echo "🔄 RESTARTING FRONTEND..."
+pkill -f "./frontend" 2>/dev/null || true
+sleep 2
+
+export PRODUCT_CATALOG_SERVICE_ADDR="localhost:3550" \
+CURRENCY_SERVICE_ADDR="localhost:7000" \
+CART_SERVICE_ADDR="localhost:7070" \
+RECOMMENDATION_SERVICE_ADDR="localhost:8081" \
+CHECKOUT_SERVICE_ADDR="localhost:5050" \
+SHIPPING_SERVICE_ADDR="localhost:50051" \
+AD_SERVICE_ADDR="localhost:9555" \
+SHOPPING_ASSISTANT_SERVICE_ADDR="localhost:8085" \
+REVIEW_SERVICE_ADDR="localhost:8082" \
+COLLECTOR_SERVICE_ADDR="localhost:4317" && ./frontend > frontend.log 2>&1 &
+
+echo "Frontend restarted! PID: $!"
+sleep 3
+
+echo "✅ Checking if frontend is responding..."
+curl -s -w "%{http_code}\n" http://localhost:8080/ | tail -1
+```

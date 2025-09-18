@@ -46,11 +46,14 @@ var (
 	frontendMessage  = strings.TrimSpace(os.Getenv("FRONTEND_MESSAGE"))
 	isCymbalBrand    = "true" == strings.ToLower(os.Getenv("CYMBAL_BRANDING"))
 	assistantEnabled = "true" == strings.ToLower(os.Getenv("ENABLE_ASSISTANT"))
-	templates        = template.Must(template.New("").
-				Funcs(template.FuncMap{
-			"renderMoney":        renderMoney,
-			"renderCurrencyLogo": renderCurrencyLogo,
-		}).ParseGlob("templates/*.html"))
+		templates        = template.Must(template.New("").
+			Funcs(template.FuncMap{
+		"renderMoney":        renderMoney,
+		"renderCurrencyLogo": renderCurrencyLogo,
+		"iterate":            iterate,
+		"sub":                sub,
+		"formatTimestamp":    formatTimestamp,
+	}).ParseGlob("templates/*.html"))
 	plat platformDetails
 )
 
@@ -195,6 +198,39 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	// Fetch product reviews and summary
+	reviews, err := fe.getProductReviews(r.Context(), id, 10, 0)
+	if err != nil {
+		log.WithField("error", err).Warn("failed to get product reviews")
+		reviews = []*pb.Review{} // Empty slice if error
+	}
+
+	reviewSummary, err := fe.getProductReviewSummary(r.Context(), id)
+	if err != nil {
+		log.WithField("error", err).Warn("failed to get product review summary")
+		reviewSummary = &pb.ProductReviewSummary{
+			ProductId:     id,
+			TotalReviews:  0,
+			AverageRating: 0.0,
+		}
+	}
+
+	// Check if current user has already reviewed this product
+	userID := sessionID(r)
+	userReviews, err := fe.getUserReviews(r.Context(), userID, 100, 0)
+	if err != nil {
+		log.WithField("error", err).Warn("failed to get user reviews")
+		userReviews = []*pb.Review{}
+	}
+	
+	var userReview *pb.Review
+	for _, review := range userReviews {
+		if review.ProductId == id {
+			userReview = review
+			break
+		}
+	}
+
 	if err := templates.ExecuteTemplate(w, "product", injectCommonTemplateData(r, map[string]interface{}{
 		"ad":              fe.chooseAd(r.Context(), p.Categories, log),
 		"show_currency":   true,
@@ -203,6 +239,10 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 		"recommendations": recommendations,
 		"cart_size":       cartSize(cart),
 		"packagingInfo":   packagingInfo,
+		"reviews":         reviews,
+		"reviewSummary":   reviewSummary,
+		"userReview":      userReview,
+		"userID":          userID,
 	})); err != nil {
 		log.Println(err)
 	}
@@ -245,6 +285,97 @@ func (fe *frontendServer) emptyCartHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.Header().Set("location", baseUrl + "/")
+	w.WriteHeader(http.StatusFound)
+}
+
+func (fe *frontendServer) createReviewHandler(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+	
+	productID := r.FormValue("product_id")
+	ratingStr := r.FormValue("rating")
+	reviewText := r.FormValue("review_text")
+	
+	if productID == "" || ratingStr == "" || reviewText == "" {
+		renderHTTPError(log, r, w, errors.New("missing required fields"), http.StatusBadRequest)
+		return
+	}
+	
+	rating, err := strconv.ParseInt(ratingStr, 10, 32)
+	if err != nil || rating < 1 || rating > 5 {
+		renderHTTPError(log, r, w, errors.New("invalid rating"), http.StatusBadRequest)
+		return
+	}
+	
+	userID := sessionID(r)
+	_, err = fe.createReview(r.Context(), userID, productID, int32(rating), reviewText)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to create review"), http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("location", baseUrl + "/product/" + productID)
+	w.WriteHeader(http.StatusFound)
+}
+
+func (fe *frontendServer) updateReviewHandler(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+	
+	reviewIDStr := mux.Vars(r)["id"]
+	productID := r.FormValue("product_id")
+	ratingStr := r.FormValue("rating")
+	reviewText := r.FormValue("review_text")
+	
+	if reviewIDStr == "" || productID == "" || ratingStr == "" || reviewText == "" {
+		renderHTTPError(log, r, w, errors.New("missing required fields"), http.StatusBadRequest)
+		return
+	}
+	
+	reviewID, err := strconv.ParseInt(reviewIDStr, 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.New("invalid review ID"), http.StatusBadRequest)
+		return
+	}
+	
+	rating, err := strconv.ParseInt(ratingStr, 10, 32)
+	if err != nil || rating < 1 || rating > 5 {
+		renderHTTPError(log, r, w, errors.New("invalid rating"), http.StatusBadRequest)
+		return
+	}
+	
+	_, err = fe.updateReview(r.Context(), int32(reviewID), int32(rating), reviewText)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to update review"), http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("location", baseUrl + "/product/" + productID)
+	w.WriteHeader(http.StatusFound)
+}
+
+func (fe *frontendServer) deleteReviewHandler(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+	
+	reviewIDStr := mux.Vars(r)["id"]
+	productID := r.FormValue("product_id")
+	
+	if reviewIDStr == "" || productID == "" {
+		renderHTTPError(log, r, w, errors.New("missing required fields"), http.StatusBadRequest)
+		return
+	}
+	
+	reviewID, err := strconv.ParseInt(reviewIDStr, 10, 32)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.New("invalid review ID"), http.StatusBadRequest)
+		return
+	}
+	
+	err = fe.deleteReview(r.Context(), int32(reviewID))
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to delete review"), http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("location", baseUrl + "/product/" + productID)
 	w.WriteHeader(http.StatusFound)
 }
 
@@ -632,4 +763,24 @@ func stringinSlice(slice []string, val string) bool {
 		}
 	}
 	return false
+}
+
+// Template helper functions for reviews
+func iterate(count int32) []int {
+	var result []int
+	for i := 0; i < int(count); i++ {
+		result = append(result, i)
+	}
+	return result
+}
+
+func sub(a, b int32) int32 {
+	return a - b
+}
+
+func formatTimestamp(timestamp int64) string {
+	if timestamp == 0 {
+		return ""
+	}
+	return time.Unix(timestamp, 0).Format("January 2, 2006")
 }
