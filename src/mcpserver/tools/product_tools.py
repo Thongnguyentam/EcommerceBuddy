@@ -1,6 +1,6 @@
 from typing import Dict, Any, List
 from clients.product_client import ProductCatalogServiceClient
-import demo_pb2
+from genproto import demo_pb2
 
 
 class ProductTools:

@@ -1,9 +1,8 @@
 import grpc
 from typing import Optional, List
 
-# Use the local protobuf files we copied to mcpserver directory  
-import demo_pb2
-import demo_pb2_grpc
+# Import from genproto package
+from genproto import demo_pb2, demo_pb2_grpc
 
 
 class ProductCatalogServiceClient:

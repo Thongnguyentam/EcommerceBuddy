@@ -12,7 +12,11 @@ This test verifies the MCP cart tools work with the real cartservice.
 
 import sys
 import time
+import os
 from typing import Any, Dict
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from clients.cart_client import CartServiceClient
 from tools.cart_tool import CartTools

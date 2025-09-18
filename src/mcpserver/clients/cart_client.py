@@ -1,9 +1,8 @@
 import grpc
 from typing import Optional
 
-# Use the local protobuf files we copied to mcpserver directory
-import demo_pb2
-import demo_pb2_grpc
+# Import from genproto package
+from genproto import demo_pb2, demo_pb2_grpc
 
 # Client stub (you’re using it): CartServiceStub
 # Server stub/servicer: CartServiceServicer (for implementing the server)

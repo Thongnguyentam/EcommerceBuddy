@@ -12,7 +12,11 @@ This test verifies the MCP product tools work with the real productcatalogservic
 
 import sys
 import time
+import os
 from typing import Any, Dict
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from clients.product_client import ProductCatalogServiceClient
 from tools.product_tools import ProductTools
