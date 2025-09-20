@@ -137,7 +137,7 @@ func loadCatalogFromCloudSQL(catalog *pb.ListProductsResponse) error {
 		
 		// Parse categories
 		if categories != "" {
-			categories = strings.ToLower(categories)
+		categories = strings.ToLower(categories)
 			product.Categories = strings.Split(strings.Trim(categories, "{}"), ",")
 		}
 		

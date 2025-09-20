@@ -107,8 +107,9 @@ func getDatabasePassword() (string, error) {
 func callVertexAIEmbedding(text string) ([]float32, error) {
 	embeddingServiceURL := os.Getenv("EMBEDDING_SERVICE_URL")
 	if embeddingServiceURL == "" {
-		embeddingServiceURL = "http://embedding-service:8081"
+		embeddingServiceURL = "http://embeddingservice:8081"
 	}
+	log.Infof("Calling embedding service at %s with text: '%s'", embeddingServiceURL, text)
 	
 	// Prepare request payload
 	payload := map[string]string{
@@ -120,15 +121,19 @@ func callVertexAIEmbedding(text string) ([]float32, error) {
 	}
 	
 	// Make HTTP request
+	log.Infof("Making POST request to %s/embed", embeddingServiceURL)
 	resp, err := http.Post(embeddingServiceURL+"/embed", "application/json", strings.NewReader(string(payloadBytes)))
 	if err != nil {
+		log.Errorf("HTTP request failed: %v", err)
 		return nil, fmt.Errorf("failed to call embedding service: %v", err)
 	}
 	defer resp.Body.Close()
 	
 	if resp.StatusCode != http.StatusOK {
+		log.Errorf("Embedding service returned status %d", resp.StatusCode)
 		return nil, fmt.Errorf("embedding service returned status %d", resp.StatusCode)
 	}
+	log.Infof("Embedding service responded with status %d", resp.StatusCode)
 	
 	// Parse response
 	var response struct {
@@ -210,27 +215,41 @@ func (p *productCatalog) SemanticSearchProducts(ctx context.Context, req *pb.Sem
 		limit = 10 // Default limit
 	}
 
-	// Hybrid search query with weighted similarity scores using Vertex AI embedding function
+	// Generate query embedding using our embedding service
+	log.Infof("Generating embedding for query: '%s'", req.Query)
+	queryEmbedding, err := callVertexAIEmbedding(req.Query)
+	if err != nil {
+		log.Errorf("Failed to generate query embedding: %v", err)
+		// Fallback to regular search if embedding generation fails
+		log.Warn("Falling back to regular search due to embedding failure")
+		searchReq := &pb.SearchProductsRequest{Query: req.Query}
+		return p.SearchProducts(ctx, searchReq)
+	}
+	
+	// Convert query embedding to PostgreSQL vector format
+	queryEmbeddingStr := embeddingToVectorString(queryEmbedding)
+	log.Infof("Generated query embedding with %d dimensions", len(queryEmbedding))
+
+	// Hybrid search query with weighted similarity scores using precomputed embeddings
 	query := `
-		WITH query_embedding AS (
-		  SELECT generate_vertex_ai_embedding($1) as query_vec
-		)
 		SELECT p.id, p.name, p.description, p.picture, p.price_usd_currency_code, 
 			   p.price_usd_units, p.price_usd_nanos, p.categories, p.target_tags, p.use_context,
 			   (
-				   COALESCE(p.combined_embedding <=> q.query_vec, 1.0) * 0.6 +
-				   COALESCE(p.target_tags_embedding <=> q.query_vec, 1.0) * 0.2 +
-				   COALESCE(p.use_context_embedding <=> q.query_vec, 1.0) * 0.2
+				   COALESCE(p.combined_embedding <=> $1::vector, 1.0) * 0.6 +
+				   COALESCE(p.target_tags_embedding <=> $1::vector, 1.0) * 0.2 +
+				   COALESCE(p.use_context_embedding <=> $1::vector, 1.0) * 0.2
 			   ) as similarity_score
-		FROM products p, query_embedding q
+		FROM products p
 		WHERE p.combined_embedding IS NOT NULL
 		ORDER BY similarity_score ASC
 		LIMIT $2
 	`
 
 	log.Infof("Executing semantic search query with params: query='%s', limit=%d", req.Query, limit)
+	log.Infof("Query embedding string (first 100 chars): %s", queryEmbeddingStr[:minInt(100, len(queryEmbeddingStr))])
+	log.Infof("Full SQL query: %s", query)
 	
-	rows, err := db.QueryContext(ctx, query, req.Query, limit)
+	rows, err := db.QueryContext(ctx, query, queryEmbeddingStr, limit)
 	if err != nil {
 		log.Errorf("Semantic search query failed: %v", err)
 		// Fallback to regular search
@@ -387,4 +406,12 @@ func embeddingToVectorString(embedding []float32) string {
 		strs[i] = fmt.Sprintf("%.6f", v)
 	}
 	return fmt.Sprintf("[%s]", strings.Join(strs, ","))
+}
+
+// minInt returns the minimum of two integers
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 } 
