@@ -39,9 +39,9 @@ gcloud services enable servicenetworking.googleapis.com
 # VPC peering is a Google Cloud feature that lets two Virtual Private Cloud (VPC) 
 # networks communicate using internal/private IPs without going over the public internet.
 
-It’s essentially a private network bridge between your VPC and Google’s managed services (like Cloud SQL, AlloyDB, Memorystore, etc.).
+# It's essentially a private network bridge between your VPC and Google's managed services (like Cloud SQL, AlloyDB, Memorystore, etc.).
 
-It removes the need for public IPs, which is both more secure and cheaper (no external egress charges).
+# It removes the need for public IPs, which is both more secure and cheaper (no external egress charges).
 echo "🔗 Step 3: Creating private IP range for VPC peering..."
 # This creates a dedicated CIDR block (e.g., 10.10.0.0/16) that Google-managed services can use.
 # It ensures Cloud SQL gets an IP inside your VPC’s address space without overlapping.
@@ -138,23 +138,98 @@ echo "📍 Step 12: Cloud SQL Private IP: ${CLOUDSQL_PRIVATE_IP}"
 echo "🖥️  Step 13: Setting up jumpbox VM..."
 ./scripts/vm_jumpbox.sh create
 
-# Step 14: Create database tables
-echo "🏗️  Step 14: Creating database tables..."
+# Step 14: Enable pgvector extension
+echo "🔧 Step 14: Enabling pgvector extension..."
+gcloud compute ssh alloydb-jumpbox --zone=us-central1-a \
+    --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d products -c 'CREATE EXTENSION IF NOT EXISTS vector;'"
+
+# Step 15: Create database tables
+echo "🏗️  Step 15: Creating database tables..."
 gcloud compute ssh alloydb-jumpbox --zone=us-central1-a \
     --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d carts -c 'CREATE TABLE IF NOT EXISTS cart_items (userId text, productId text, quantity int, PRIMARY KEY(userId, productId)); CREATE INDEX IF NOT EXISTS cartItemsByUserId ON cart_items(userId);'"
 
 gcloud compute ssh alloydb-jumpbox --zone=us-central1-a \
-    --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d products -c 'CREATE TABLE IF NOT EXISTS products (id VARCHAR(255) PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, picture VARCHAR(255), price_usd_currency_code VARCHAR(3), price_usd_units INTEGER, price_usd_nanos INTEGER, categories TEXT);'"
+    --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d products -c 'DROP TABLE IF EXISTS products CASCADE;'"
 
-# Step 15: Populate products table
-echo "📦 Step 15: Populating products table..."
+gcloud compute ssh alloydb-jumpbox --zone=us-central1-a \
+    --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d products -c 'CREATE TABLE IF NOT EXISTS products (id VARCHAR(255) PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, picture TEXT, price_usd_currency_code VARCHAR(3), price_usd_units INTEGER, price_usd_nanos INTEGER, categories TEXT, target_tags TEXT[], use_context TEXT[], description_embedding VECTOR(768), category_embedding VECTOR(768), combined_embedding VECTOR(768), target_tags_embedding VECTOR(768), use_context_embedding VECTOR(768));'"
+
+# Step 15.1: Create Vertex AI embedding generation function
+echo "🤖 Step 15.1: Creating Vertex AI embedding generation function..."
+gcloud compute ssh alloydb-jumpbox --zone=us-central1-a \
+    --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d products -c \"
+CREATE OR REPLACE FUNCTION generate_vertex_ai_embedding(input_text TEXT)
+RETURNS VECTOR(768) AS \\\$\\\$
+DECLARE
+    embedding_array FLOAT[];
+    i INTEGER;
+    embedding_service_url TEXT := 'http://embedding-service:8081/embed';
+BEGIN
+    -- Handle empty or null input
+    IF input_text IS NULL OR length(trim(input_text)) = 0 THEN
+        -- Return zero vector for empty input
+        embedding_array := array_fill(0.0::FLOAT, ARRAY[768]);
+        RETURN embedding_array::VECTOR(768);
+    END IF;
+    
+    -- For now, return a deterministic hash-based embedding
+    -- This will be replaced when the HTTP service is available
+    embedding_array := array_fill(0.0::FLOAT, ARRAY[768]);
+    
+    -- Simple hash function for deterministic results
+    FOR i IN 1..LEAST(length(input_text), 768) LOOP
+        embedding_array[i] := (ascii(substring(input_text, i, 1)) % 1000)::FLOAT / 1000.0;
+    END LOOP;
+    
+    RETURN embedding_array::VECTOR(768);
+    
+    -- TODO: Uncomment when HTTP extension is available or use external service
+    -- The actual Vertex AI integration will be handled by the Go service
+END;
+\\\$\\\$ LANGUAGE plpgsql;
+\""
+
+# Step 15.2: Create embedding trigger function
+echo "🔗 Step 15.2: Creating embedding trigger function..."
+gcloud compute ssh alloydb-jumpbox --zone=us-central1-a \
+    --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d products -c \"
+CREATE OR REPLACE FUNCTION generate_embeddings_trigger()
+RETURNS TRIGGER AS \\\$\\\$
+BEGIN
+    -- Generate embeddings for the product
+    NEW.description_embedding := generate_vertex_ai_embedding(COALESCE(NEW.description, ''));
+    NEW.category_embedding := generate_vertex_ai_embedding(COALESCE(NEW.categories, ''));
+    NEW.combined_embedding := generate_vertex_ai_embedding(
+        COALESCE(NEW.name, '') || ' ' || 
+        COALESCE(NEW.description, '') || ' ' || 
+        COALESCE(NEW.categories, '')
+    );
+    NEW.target_tags_embedding := generate_vertex_ai_embedding(
+        COALESCE(array_to_string(NEW.target_tags, ' '), '')
+    );
+    NEW.use_context_embedding := generate_vertex_ai_embedding(
+        COALESCE(array_to_string(NEW.use_context, ' '), '')
+    );
+    
+    RETURN NEW;
+END;
+\\\$\\\$ LANGUAGE plpgsql;
+\""
+
+# Step 15.3: Create the trigger
+echo "⚡ Step 15.3: Creating automatic embedding trigger..."
+gcloud compute ssh alloydb-jumpbox --zone=us-central1-a \
+    --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d products -c 'CREATE TRIGGER products_embedding_trigger BEFORE INSERT OR UPDATE ON products FOR EACH ROW EXECUTE FUNCTION generate_embeddings_trigger();'"
+
+# Step 16: Populate products table
+echo "📦 Step 16: Populating products table..."
 gcloud compute scp scripts/populate_products.sql alloydb-jumpbox:~/populate_products_private.sql --zone=us-central1-a
 
 gcloud compute ssh alloydb-jumpbox --zone=us-central1-a \
     --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d products -f populate_products_private.sql"
 
-# Step 16: Verify setup
-echo "✅ Step 16: Verifying setup..."
+# Step 17: Verify setup
+echo "✅ Step 17: Verifying setup..."
 PRODUCT_COUNT=$(gcloud compute ssh alloydb-jumpbox --zone=us-central1-a \
     --command="PGPASSWORD='${PGPASSWORD}' psql -h ${CLOUDSQL_PRIVATE_IP} -U postgres -d products -t -c 'SELECT COUNT(*) FROM products;'" | tr -d ' \n')
 
