@@ -140,6 +140,14 @@ func run(port string) string {
 		log.Fatalf("could not parse product catalog: %v", err)
 	}
 
+	// Initialize database connection for semantic search
+	if err := initDatabase(); err != nil {
+		log.Warnf("Failed to initialize database for semantic search: %v", err)
+		log.Info("Semantic search will be disabled, falling back to regular search")
+	} else {
+		log.Info("Semantic search enabled with automatic embedding generation")
+	}
+
 	pb.RegisterProductCatalogServiceServer(srv, svc)
 	healthpb.RegisterHealthServer(srv, svc)
 	go srv.Serve(listener)

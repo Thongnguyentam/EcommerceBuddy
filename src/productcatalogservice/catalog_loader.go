@@ -112,7 +112,7 @@ func loadCatalogFromCloudSQL(catalog *pb.ListProductsResponse) error {
 	}
 	defer pool.Close()
 
-	query := "SELECT id, name, description, picture, price_usd_currency_code, price_usd_units, price_usd_nanos, categories FROM " + pgTableName
+	query := "SELECT id, name, description, picture, price_usd_currency_code, price_usd_units, price_usd_nanos, categories, target_tags, use_context FROM " + pgTableName
 	rows, err := pool.Query(context.Background(), query)
 	if err != nil {
 		log.Warnf("failed to query database: %v", err)
@@ -126,15 +126,30 @@ func loadCatalogFromCloudSQL(catalog *pb.ListProductsResponse) error {
 		product.PriceUsd = &pb.Money{}
 
 		var categories string
+		var targetTags, useContext []string
 		err = rows.Scan(&product.Id, &product.Name, &product.Description,
 			&product.Picture, &product.PriceUsd.CurrencyCode, &product.PriceUsd.Units,
-			&product.PriceUsd.Nanos, &categories)
+			&product.PriceUsd.Nanos, &categories, &targetTags, &useContext)
 		if err != nil {
 			log.Warnf("failed to scan query result row: %v", err)
 			return err
 		}
-		categories = strings.ToLower(categories)
-		product.Categories = strings.Split(categories, ",")
+		
+		// Parse categories
+		if categories != "" {
+			categories = strings.ToLower(categories)
+			product.Categories = strings.Split(strings.Trim(categories, "{}"), ",")
+		}
+		
+		// Assign target_tags (already a []string slice from pgx)
+		if len(targetTags) > 0 {
+			product.TargetTags = targetTags
+		}
+		
+		// Assign use_context (already a []string slice from pgx)
+		if len(useContext) > 0 {
+			product.UseContext = useContext
+		}
 
 		catalog.Products = append(catalog.Products, product)
 	}
