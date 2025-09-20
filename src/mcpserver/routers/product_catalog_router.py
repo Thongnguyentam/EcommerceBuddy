@@ -3,7 +3,7 @@ from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException
 
-from models.product_catalog import ProductSearchRequest, ProductByIdRequest, ProductByCategoryRequest
+from models.product_catalog import ProductSearchRequest, ProductByIdRequest, ProductByCategoryRequest, SemanticSearchRequest
 from tools.product_tools import ProductTools
 
 logger = logging.getLogger(__name__)
@@ -61,4 +61,18 @@ async def get_products_by_category(request: ProductByCategoryRequest) -> Dict[st
         return result
     except Exception as e:
         logger.error(f"Error in get_products_by_category: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/semantic-search")
+async def semantic_search_products(request: SemanticSearchRequest) -> Dict[str, Any]:
+    """Search for products using AI-powered semantic search."""
+    try:
+        result = product_tools.semantic_search_products(
+            query=request.query, 
+            limit=request.limit or 10
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in semantic_search_products: {e}")
         raise HTTPException(status_code=500, detail=str(e))

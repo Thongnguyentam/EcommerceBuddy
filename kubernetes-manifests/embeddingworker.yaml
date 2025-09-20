@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: embeddingworker
+  annotations:
+    iam.gke.io/gcp-service-account: cloudsql-user-sa-private@gke-hack-471804.iam.gserviceaccount.com
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embeddingworker
+  labels:
+    app: embeddingworker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embeddingworker
+  template:
+    metadata:
+      labels:
+        app: embeddingworker
+    spec:
+      serviceAccountName: embeddingworker
+      containers:
+      - name: embeddingworker
+        image: gcr.io/gke-hack-471804/embeddingworker:latest
+        env:
+        - name: DB_HOST
+          value: "10.103.0.3"
+        - name: DB_USER
+          value: "postgres"
+        - name: DB_NAME
+          value: "products"
+        - name: ALLOYDB_SECRET_NAME
+          value: "cloudsql-secret-private"
+        - name: EMBEDDING_SERVICE_URL
+          value: "http://embeddingservice:8081"
+        - name: PROJECT_ID
+          value: "gke-hack-471804"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import psycopg2; print('OK')"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import psycopg2; print('OK')"
+          initialDelaySeconds: 5
+          periodSeconds: 10 

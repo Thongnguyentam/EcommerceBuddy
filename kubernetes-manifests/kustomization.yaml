@@ -33,7 +33,7 @@ components:
 # - ../kustomize/components/network-policies
 - ../kustomize/components/cloudsql
 - ../kustomize/components/mcpserver
-# - ../kustomize/components/shopping-assistant
+- ../kustomize/components/shopping-assistant-cloudsql
 # - ../kustomize/components/spanner
 # - ../kustomize/components/container-images-tag
 # - ../kustomize/components/container-images-tag-suffix

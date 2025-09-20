@@ -19,3 +19,4 @@ resources:
 components:
 - components/cloudsql
 - components/mcpserver
+- components/shopping-assistant-cloudsql

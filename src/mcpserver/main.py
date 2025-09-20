@@ -29,13 +29,15 @@ from tools.cart_tool import CartTools
 from tools.product_tools import ProductTools
 from tools.review_tools import ReviewTools
 from tools.currency_tools import CurrencyTools
+from tools.shopping_assistant_tools import ShoppingAssistantTools
 from clients.cart_client import CartServiceClient
 from clients.product_client import ProductCatalogServiceClient
 from clients.review_client import ReviewServiceClient
 from clients.currency_client import CurrencyServiceClient
+from clients.shopping_assistant_client import ShoppingAssistantServiceClient
 
 # Import routers
-from routers import cart_router, product_catalog_router, review_router, currency_router
+from routers import cart_router, product_catalog_router, review_router, currency_router, shopping_assistant_router
 
 
 # Configure logging
@@ -47,16 +49,18 @@ cart_client: CartServiceClient = None
 product_client: ProductCatalogServiceClient = None
 review_client: ReviewServiceClient = None
 currency_client: CurrencyServiceClient = None
+shopping_assistant_client: ShoppingAssistantServiceClient = None
 cart_tools: CartTools = None
 product_tools: ProductTools = None
 review_tools: ReviewTools = None
 currency_tools: CurrencyTools = None
+shopping_assistant_tools: ShoppingAssistantTools = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - startup and shutdown."""
-    global cart_client, product_client, review_client, currency_client, cart_tools, product_tools, review_tools, currency_tools
+    global cart_client, product_client, review_client, currency_client, shopping_assistant_client, cart_tools, product_tools, review_tools, currency_tools, shopping_assistant_tools
     
     # Startup
     logger.info("🚀 Starting MCP Server...")
@@ -66,28 +70,33 @@ async def lifespan(app: FastAPI):
     product_host = os.getenv("PRODUCT_SERVICE_HOST", "productcatalogservice:3550")
     review_host = os.getenv("REVIEW_SERVICE_HOST", "reviewservice:8080")
     currency_host = os.getenv("CURRENCY_SERVICE_HOST", "currencyservice:7000")
+    shopping_assistant_host = os.getenv("SHOPPING_ASSISTANT_SERVICE_HOST", "shoppingassistantservice:80")
     
     cart_client = CartServiceClient(host=cart_host)
     product_client = ProductCatalogServiceClient(host=product_host)
     review_client = ReviewServiceClient(host=review_host)
     currency_client = CurrencyServiceClient(address=currency_host)
+    shopping_assistant_client = ShoppingAssistantServiceClient(address=shopping_assistant_host)
     
     # Initialize tools
     cart_tools = CartTools(client=cart_client)
     product_tools = ProductTools(client=product_client)
     review_tools = ReviewTools(client=review_client)
     currency_tools = CurrencyTools(client=currency_client)
+    shopping_assistant_tools = ShoppingAssistantTools(client=shopping_assistant_client)
     
     # Set tools in routers
     cart_router.set_cart_tools(cart_tools)
     product_catalog_router.set_product_tools(product_tools)
     review_router.set_review_tools(review_tools)
     currency_router.set_currency_tools(currency_tools)
+    shopping_assistant_router.set_shopping_assistant_tools(shopping_assistant_tools)
     
     logger.info(f"✅ Connected to cartservice at {cart_host}")
     logger.info(f"✅ Connected to productcatalogservice at {product_host}")
     logger.info(f"✅ Connected to reviewservice at {review_host}")
     logger.info(f"✅ Connected to currencyservice at {currency_host}")
+    logger.info(f"✅ Connected to shoppingassistantservice at {shopping_assistant_host}")
     
     yield
     
@@ -101,6 +110,8 @@ async def lifespan(app: FastAPI):
         review_client.close()
     if currency_client:
         currency_client.close()
+    if shopping_assistant_client:
+        shopping_assistant_client.close()
 
 
 # Create FastAPI app
@@ -125,6 +136,7 @@ app.include_router(cart_router.router)
 app.include_router(product_catalog_router.router)
 app.include_router(review_router.router)
 app.include_router(currency_router.router)
+app.include_router(shopping_assistant_router.router)
 
 
 # Health check endpoint
@@ -199,6 +211,15 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "category": {"type": "string", "description": "Category to filter by"}
                 },
                 "endpoint": "/tools/products/category"
+            },
+            {
+                "name": "semantic_search_products",
+                "description": "Search for products using AI-powered semantic search with vector embeddings",
+                "parameters": {
+                    "query": {"type": "string", "description": "Natural language search query"},
+                    "limit": {"type": "integer", "description": "Maximum number of results (default: 10, max: 50)", "required": False}
+                },
+                "endpoint": "/tools/products/semantic-search"
             },
             {
                 "name": "create_review",
@@ -287,6 +308,51 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "currency_code": {"type": "string", "description": "Currency code (e.g., 'USD')"}
                 },
                 "endpoint": "/currency/format-money"
+            },
+            {
+                "name": "get_ai_recommendations",
+                "description": "Get AI-powered product recommendations based on user query and optional room image",
+                "parameters": {
+                    "user_query": {"type": "string", "description": "User's request for product recommendations"},
+                    "room_image": {"type": "string", "description": "Optional base64-encoded image of the room", "required": False}
+                },
+                "endpoint": "/shopping-assistant/ai-recommendations"
+            },
+            {
+                "name": "get_style_based_recommendations",
+                "description": "Get product recommendations based on interior design style",
+                "parameters": {
+                    "room_style": {"type": "string", "description": "Interior design style (e.g., 'modern', 'rustic', 'minimalist')"},
+                    "budget_max": {"type": "number", "description": "Optional maximum budget for recommendations", "required": False}
+                },
+                "endpoint": "/shopping-assistant/style-recommendations"
+            },
+            {
+                "name": "get_room_specific_recommendations",
+                "description": "Get product recommendations for specific room types",
+                "parameters": {
+                    "room_type": {"type": "string", "description": "Type of room (e.g., 'living room', 'bedroom', 'kitchen')"},
+                    "specific_needs": {"type": "string", "description": "Optional specific requirements", "required": False}
+                },
+                "endpoint": "/shopping-assistant/room-recommendations"
+            },
+            {
+                "name": "analyze_room_image",
+                "description": "Analyze a room image and provide tailored product recommendations",
+                "parameters": {
+                    "room_image": {"type": "string", "description": "Base64-encoded image of the room"},
+                    "user_preferences": {"type": "string", "description": "Optional user preferences or requirements", "required": False}
+                },
+                "endpoint": "/shopping-assistant/analyze-room"
+            },
+            {
+                "name": "get_complementary_products",
+                "description": "Get product recommendations that complement existing products",
+                "parameters": {
+                    "existing_products": {"type": "array", "items": {"type": "string"}, "description": "List of existing product names or descriptions"},
+                    "room_context": {"type": "string", "description": "Optional context about the room", "required": False}
+                },
+                "endpoint": "/shopping-assistant/complementary-products"
             }
         ]
     }

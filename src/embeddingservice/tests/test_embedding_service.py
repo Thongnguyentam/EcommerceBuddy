@@ -122,8 +122,8 @@ class TestEmbeddingServiceAPI(unittest.TestCase):
         self.patcher = patch('embedding_service.embedding_service', self.mock_service)
         self.patcher.start()
         
-        self.app = create_app()
-        self.client = self.app.test_client()
+            self.app = create_app()
+            self.client = self.app.test_client()
 
     def tearDown(self):
         """Clean up after tests."""

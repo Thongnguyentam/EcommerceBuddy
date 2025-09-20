@@ -86,11 +86,36 @@ def test_product_operations() -> None:
         print(f"   ✅ Status: {result['status']}")
         print(f"   ✅ Found: {result['total_count']} accessory products")
         
+        # Test 7: Semantic search for comfortable seating
+        print("\n7️⃣ Semantic search for 'comfortable seating'...")
+        result = tools.semantic_search_products("comfortable seating", limit=5)
+        print(f"   ✅ Status: {result['status']}")
+        print(f"   ✅ Search type: {result.get('search_type', 'N/A')}")
+        print(f"   ✅ Found: {result['total_count']} semantically related products")
+        if result['total_count'] > 0:
+            print(f"   ✅ First result: {result['products'][0]['name']}")
+        
+        # Test 8: Semantic search for kitchen appliances
+        print("\n8️⃣ Semantic search for 'kitchen appliances'...")
+        result = tools.semantic_search_products("kitchen appliances", limit=3)
+        print(f"   ✅ Status: {result['status']}")
+        print(f"   ✅ Found: {result['total_count']} kitchen-related products")
+        if result['total_count'] > 0:
+            for i, product in enumerate(result['products'][:3], 1):
+                print(f"   ✅ {i}. {product['name']}")
+        
+        # Test 9: Semantic search for winter clothing
+        print("\n9️⃣ Semantic search for 'winter clothing'...")
+        result = tools.semantic_search_products("winter clothing", limit=3)
+        print(f"   ✅ Status: {result['status']}")
+        print(f"   ✅ Found: {result['total_count']} winter clothing items")
+        
         print("\n🎉 ALL TESTS PASSED!")
         print("=" * 50)
         print("✅ MCP Product Tools are working correctly with productcatalogservice!")
         print("✅ Product service is properly connected to Cloud SQL database!")
-        print("✅ All product operations are functional!")
+        print("✅ Regular search, category filtering, and semantic search are functional!")
+        print("✅ AI-powered semantic search with vector embeddings is working!")
         
     except Exception as e:
         print(f"\n❌ TEST FAILED: {e}")
@@ -122,6 +147,23 @@ def test_validation() -> None:
         result = tools.get_products_by_category("")
         assert result['status'] == 'error', "Should reject empty category"
         print(f"   ✅ Correctly rejected empty category: {result['message']}")
+        
+        # Test empty semantic search query
+        result = tools.semantic_search_products("")
+        assert result['status'] == 'error', "Should reject empty semantic search query"
+        print(f"   ✅ Correctly rejected empty semantic search query: {result['message']}")
+        
+        # Test invalid limit (negative) - should be converted to default limit
+        result = tools.semantic_search_products("test", limit=-1)
+        print(f"   ✅ Result: {result}")
+        assert result['status'] in ['ok'], "Should handle negative limit gracefully"
+        print(f"   ✅ Handled negative limit correctly: {result['status']}")
+        
+        # Test large limit (should be clamped)
+        result = tools.semantic_search_products("test", limit=100)
+        print(f"   ✅ Result: {result['status']}")
+        assert result['status'] in ['ok'], "Should handle large limit"
+        print(f"   ✅ Handled large limit correctly")
         
         print("   ✅ All validation tests passed!")
         

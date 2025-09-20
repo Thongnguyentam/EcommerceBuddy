@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 
 class ProductSearchRequest(BaseModel):
@@ -11,3 +12,8 @@ class ProductByIdRequest(BaseModel):
 
 class ProductByCategoryRequest(BaseModel):
     category: str
+
+
+class SemanticSearchRequest(BaseModel):
+    query: str
+    limit: Optional[int] = 10

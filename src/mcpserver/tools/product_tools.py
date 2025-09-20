@@ -173,6 +173,78 @@ class ProductTools:
                 "category": category.strip()
             }
     
+    def semantic_search_products(self, query: str, limit: int = 10) -> Dict[str, Any]:
+        """
+        Search for products using AI-powered semantic search.
+        
+        This method uses vector embeddings and similarity matching to find products
+        that are semantically related to the query, even if they don't contain
+        the exact search terms.
+        
+        Args:
+            query: Natural language search query
+            limit: Maximum number of results to return (default: 10, max: 50)
+            
+        Returns:
+            Dict with status, matching products, and count
+        """
+        if not query or not query.strip():
+            return {
+                "status": "error",
+                "message": "Search query cannot be empty",
+                "products": [],
+                "total_count": 0
+            }
+        
+        # Validate and clamp limit
+        if limit <= 0:
+            limit = 10
+        elif limit > 50:
+            limit = 50
+        
+        try:
+            response = self._client.semantic_search_products(query.strip(), limit)
+            
+            products = []
+            for product in response.results:
+                formatted_product = self._format_product(product)
+                # Add semantic search specific fields if available
+                if hasattr(product, 'target_tags') and product.target_tags:
+                    formatted_product['target_tags'] = list(product.target_tags)
+                if hasattr(product, 'use_context') and product.use_context:
+                    formatted_product['use_context'] = list(product.use_context)
+                products.append(formatted_product)
+            
+            return {
+                "status": "ok",
+                "products": products,
+                "total_count": len(products),
+                "query": query.strip(),
+                "search_type": "semantic",
+                "message": f"Found {len(products)} semantically related products for '{query}'"
+            }
+            
+        except Exception as e:
+            # Don't fall back to regular search - return appropriate error message
+            if "not found" in str(e).lower() or "unavailable" in str(e).lower():
+                return {
+                    "status": "no_results",
+                    "message": f"No similar items found for '{query}'. Semantic search is available but found no matching products.",
+                    "products": [],
+                    "total_count": 0,
+                    "query": query.strip(),
+                    "search_type": "semantic"
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Semantic search failed: {str(e)}. Please try a different query or check if the service is available.",
+                    "products": [],
+                    "total_count": 0,
+                    "query": query.strip(),
+                    "search_type": "semantic"
+                }
+    
     def _format_product(self, product: demo_pb2.Product) -> Dict[str, Any]:
         """
         Convert a protobuf Product to a user-friendly dict.

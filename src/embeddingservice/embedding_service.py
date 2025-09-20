@@ -31,7 +31,7 @@ if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
 
 # Initialize Vertex AI
 try:
-    aiplatform.init(project=PROJECT_ID, location=REGION)
+aiplatform.init(project=PROJECT_ID, location=REGION)
     logger.info(f"Initialized Vertex AI for project {PROJECT_ID} in region {REGION}")
 except Exception as e:
     logger.error(f"Failed to initialize Vertex AI: {e}")
@@ -45,21 +45,21 @@ class VertexAIEmbeddingService:
     def _ensure_initialized(self):
         """Lazy initialization of the Vertex AI model."""
         if not self._initialized:
-            try:
-                self.model = TextEmbeddingModel.from_pretrained(MODEL_NAME)
-                logger.info(f"Initialized Vertex AI embedding model: {MODEL_NAME}")
+        try:
+            self.model = TextEmbeddingModel.from_pretrained(MODEL_NAME)
+            logger.info(f"Initialized Vertex AI embedding model: {MODEL_NAME}")
                 self._initialized = True
-            except Exception as e:
-                logger.error(f"Failed to initialize Vertex AI model: {e}")
+        except Exception as e:
+            logger.error(f"Failed to initialize Vertex AI model: {e}")
                 self._initialized = True  # Mark as initialized to avoid retrying
                 raise RuntimeError(f"Cannot initialize Vertex AI embedding model: {e}") from e
 
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for a single text."""
-        if not text or not text.strip():
-            # Return zero vector for empty text
-            return [0.0] * 768
-        
+            if not text or not text.strip():
+                # Return zero vector for empty text
+                return [0.0] * 768
+            
         # Ensure model is initialized
         self._ensure_initialized()
         
@@ -82,9 +82,9 @@ class VertexAIEmbeddingService:
 
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts."""
-        if not texts:
-            return []
-        
+            if not texts:
+                return []
+            
         # Ensure model is initialized
         self._ensure_initialized()
         

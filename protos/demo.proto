@@ -72,6 +72,7 @@ service ProductCatalogService {
     rpc ListProducts(Empty) returns (ListProductsResponse) {}
     rpc GetProduct(GetProductRequest) returns (Product) {}
     rpc SearchProducts(SearchProductsRequest) returns (SearchProductsResponse) {}
+    rpc SemanticSearchProducts(SemanticSearchRequest) returns (SearchProductsResponse) {}
 }
 
 message Product {
@@ -84,6 +85,10 @@ message Product {
     // Categories such as "clothing" or "kitchen" that can be used to look up
     // other related products.
     repeated string categories = 6;
+    
+    // Semantic search tags
+    repeated string target_tags = 7;
+    repeated string use_context = 8;
 }
 
 message ListProductsResponse {
@@ -100,6 +105,11 @@ message SearchProductsRequest {
 
 message SearchProductsResponse {
     repeated Product results = 1;
+}
+
+message SemanticSearchRequest {
+    string query = 1;
+    int32 limit = 2;
 }
 
 // ---------------Shipping Service----------

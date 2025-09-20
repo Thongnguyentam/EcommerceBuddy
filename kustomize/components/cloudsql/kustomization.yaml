@@ -26,6 +26,7 @@ patches:
         spec:
           containers:
             - name: server
+              imagePullPolicy: Always
               env:
               - name: REDIS_ADDR
                 $patch: delete
@@ -71,6 +72,8 @@ patches:
                 value: gke-hack-471804
               - name: REGION
                 value: us-central1
+              - name: EMBEDDING_SERVICE_URL
+                value: http://embeddingservice:8081
 # productcatalogservice - add the GSA annotation for the productcatalogservice KSA
 - patch: |-
     apiVersion: v1
@@ -137,7 +140,7 @@ patches:
         spec:
           containers:
           - name: server
-            image: gcr.io/gke-hack-471804/productcatalogservice-custom:v2
+            image: gcr.io/gke-hack-471804/productcatalogservice:latest
 
 # checkoutservice - use custom image with order history persistence
 - patch: |-
@@ -163,6 +166,7 @@ patches:
         spec:
           containers:
             - name: server
+              imagePullPolicy: Always
               env:
               - name: CLOUDSQL_HOST
                 value: 10.103.0.3

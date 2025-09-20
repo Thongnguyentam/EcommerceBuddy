@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: embedding-service-ksa
+  namespace: default
+  annotations:
+    # Enable Workload Identity (preferred method)
+    iam.gke.io/gcp-service-account: embedding-service@gke-hack-471804.iam.gserviceaccount.com
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embeddingservice
+  labels:
+    app: embeddingservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embeddingservice
+  template:
+    metadata:
+      labels:
+        app: embeddingservice
+    spec:
+      serviceAccountName: embedding-service-ksa
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+      - name: server
+        image: gcr.io/gke-hack-471804/embeddingservice:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081
+        env:
+        - name: PORT
+          value: "8081"
+        - name: PROJECT_ID
+          value: "gke-hack-471804"
+        - name: REGION
+          value: "us-central1"
+        - name: EMBEDDING_MODEL
+          value: "text-embedding-004"
+        # Using Workload Identity - no explicit credentials needed
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        readinessProbe:
+          httpGet:
+            path: "/health"
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: "/health"
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        # No volume mounts needed with Workload Identity
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embeddingservice
+  labels:
+    app: embeddingservice
+spec:
+  type: ClusterIP
+  selector:
+    app: embeddingservice
+  ports:
+  - name: http
+    port: 8081
+    targetPort: 8081 

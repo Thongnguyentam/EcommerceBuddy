@@ -79,3 +79,20 @@ sleep 3
 echo "✅ Checking if frontend is responding..."
 curl -s -w "%{http_code}\n" http://localhost:8080/ | tail -1
 ```
+
+
+```shell
+kubectl describe pod -l app=productcatalogservice | grep "Image:" -A1 -B1
+
+kubectl rollout restart deployment/productcatalogservice 
+
+kubectl rollout status deployment/productcatalogservice
+
+kubectl delete pod -l app=productcatalogservice
+
+kubectl get pods -l app=productcatalogservice -w
+```
+
+```
+gcloud container images add-tag gcr.io/gke-hack-471804/productcatalogservice@sha256:66e2a90b604f7010ca3565a5c827365a9ea0f4d2ba70e2565aaedb930894a986 gcr.io/gke-hack-471804/productcatalogservice:latest
+```

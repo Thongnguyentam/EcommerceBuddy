@@ -45,6 +45,12 @@ PORT_FORWARDS = {
         'local_port': 7000,
         'service_port': 7000,
         'command': ['kubectl', 'port-forward', 'svc/currencyservice', '7000:7000']
+    },
+    'shopping-assistant': {
+        'service': 'shoppingassistantservice',
+        'local_port': 8080,
+        'service_port': 80,
+        'command': ['kubectl', 'port-forward', 'svc/shoppingassistantservice', '8080:80']
     }
 }
 
@@ -74,6 +80,11 @@ TESTS = {
         'script': 'test_currency_real_integration.py',
         'description': 'Currency Service Integration Test (Real Conversions)',
         'requires': ['currency']
+    },
+    'shopping-assistant': {
+        'script': 'test_shopping_assistant_integration.py',
+        'description': 'Shopping Assistant Service Integration Test (AI Recommendations)',
+        'requires': ['shopping-assistant']
     }
 }
 

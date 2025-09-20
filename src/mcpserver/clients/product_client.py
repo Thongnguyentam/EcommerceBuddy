@@ -51,6 +51,12 @@ class ProductCatalogServiceClient:
         request = demo_pb2.SearchProductsRequest(query=query)
         return self._stub.SearchProducts(request)  # type: ignore[arg-type]
     
+    def semantic_search_products(self, query: str, limit: int = 10) -> demo_pb2.SearchProductsResponse:
+        """Search products using semantic search with AI embeddings."""
+        self._ensure_connected()
+        request = demo_pb2.SemanticSearchRequest(query=query, limit=limit)
+        return self._stub.SemanticSearchProducts(request)  # type: ignore[arg-type]
+    
     def _ensure_connected(self) -> None:
         if self._stub is None:
             self.connect()
