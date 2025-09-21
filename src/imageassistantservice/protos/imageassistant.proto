@@ -1,0 +1,114 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package imageassistant;
+
+option go_package = "github.com/GoogleCloudPlatform/microservices-demo/src/imageassistantservice/genproto";
+
+// Image assistant service for gRPC communication
+service ImageAssistantService {
+  // Analyze image for objects, scene type, styles, colors
+  rpc AnalyzeImage(AnalyzeImageRequest) returns (AnalyzeImageResponse);
+  
+  // Visualize product inside a user photo (render overlay)
+  rpc VisualizeProduct(VisualizeProductRequest) returns (VisualizeProductResponse);
+  
+  // Health check
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// Object detection result
+message DetectedObject {
+  string label = 1;
+  float confidence = 2;
+  BoundingBox box = 3;
+}
+
+// Bounding box coordinates
+message BoundingBox {
+  float x = 1;
+  float y = 2;
+  float w = 3;
+  float h = 4;
+}
+
+// Product placement configuration
+message ProductPlacement {
+  Position position = 1;
+  float scale = 2;
+  float rotation = 3;
+  string occlusion_mask_url = 4;
+}
+
+// Position coordinates
+message Position {
+  float x = 1;
+  float y = 2;
+}
+
+// Render metadata
+message RenderMetadata {
+  int32 latency_ms = 1;
+  int64 seed = 2;
+}
+
+// Analyze image request
+message AnalyzeImageRequest {
+  string image_url = 1;
+  string context = 2;
+}
+
+// Analyze image response
+message AnalyzeImageResponse {
+  repeated DetectedObject objects = 1;
+  string scene_type = 2;
+  repeated string styles = 3;
+  repeated string colors = 4;
+  repeated string tags = 5;
+  bool success = 6;
+  string message = 7;
+}
+
+// Visualize product request
+message VisualizeProductRequest {
+  string base_image_url = 1;
+  string product_image_url = 2;
+  ProductPlacement placement = 3;
+  string prompt = 4;
+}
+
+// Visualize product response
+message VisualizeProductResponse {
+  string render_url = 1;
+  RenderMetadata metadata = 2;
+  bool success = 3;
+  string message = 4;
+}
+
+// Health check messages
+message HealthCheckRequest {
+  string service = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+    SERVICE_UNKNOWN = 3;
+  }
+  ServingStatus status = 1;
+} 
