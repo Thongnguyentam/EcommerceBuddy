@@ -104,18 +104,35 @@ class ProductVisualizerRecontext:
         
         try:
             # Create a comprehensive prompt for placement analysis
+            # Download both images to analyze dimensions
+            base_image_bytes = await self._download_image(base_image_url)
+            product_image_bytes = await self._download_image(product_image_url)
+            
+            # Get image dimensions
+            from PIL import Image
+            base_image = Image.open(io.BytesIO(base_image_bytes))
+            product_image = Image.open(io.BytesIO(product_image_bytes))
+            
+            base_width, base_height = base_image.size
+            product_width, product_height = product_image.size
+            
             placement_prompt = f"""
             You are an expert in product placement and 3D spatial reasoning. Analyze these two images and determine the optimal placement for the product in the base scene.
 
             Base scene image: {base_image_url}
             Product image: {product_image_url}
             Context: {context or "Product placement for realistic visualization"}
+            
+            IMAGE DIMENSIONS:
+            - Base scene: {base_width}x{base_height} pixels
+            - Product: {product_width}x{product_height} pixels
+            - Product aspect ratio: {product_width/product_height:.2f}
 
             Consider:
             1. Scene depth and perspective
             2. Available surfaces (tables, floors, counters)
             3. Lighting consistency
-            4. Realistic scale proportions
+            4. Realistic scale proportions relative to base image size
             5. Occlusion and shadows
             6. Visual balance and composition
 
@@ -124,18 +141,18 @@ class ProductVisualizerRecontext:
                 "position": {{"x": 0.0, "y": 0.0}},
                 "scale": 0.0,
                 "rotation": 0.0,
-                "reasoning": "explanation of placement choice",
+                "reasoning": "explanation of placement choice including scale rationale",
                 "confidence": 0.0
             }}
 
             Where:
             - position.x, position.y: normalized coordinates (0.0-1.0) for placement center
-            - scale: relative size (0.1-2.0, where 1.0 = natural size)
+            - scale: relative size (0.1-1.5) - consider the product should be realistic relative to the scene
             - rotation: rotation angle in degrees (-180 to 180)
-            - reasoning: brief explanation of the placement logic
+            - reasoning: brief explanation of the placement logic and scale choice
             - confidence: confidence score (0.0-1.0)
 
-            Focus on realism and natural integration into the scene.
+            IMPORTANT: Choose scale carefully - consider how large the product should realistically appear in the scene.
             """
 
             # Call Gemini for placement analysis
@@ -193,6 +210,216 @@ class ProductVisualizerRecontext:
             logger.error(f"Failed to download image from {image_url}: {str(e)}")
             raise Exception(f"Failed to download image: {str(e)}")
 
+    async def _remove_product_background(self, product_image_url: str, prompt: Optional[str] = None) -> bytes:
+        """Remove background from product image using Imagen 3.0 inpainting removal with automatic mask detection."""
+        if not self.genai_client:
+            raise Exception("GenAI client not available. Please ensure Vertex AI is properly configured.")
+        
+        try:
+            logger.info("Removing background from product image using Imagen 3.0 inpainting...")
+            
+            # Download product image
+            product_image_bytes = await self._download_image(product_image_url)
+            
+            # Save product image to temporary file for SDK
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as product_temp:
+                product_temp.write(product_image_bytes)
+                product_temp_path = product_temp.name
+            
+            try:
+                # Create reference images for background removal
+                raw_ref = RawReferenceImage(
+                    reference_image=GenAIImage.from_file(location=product_temp_path),
+                    reference_id=0,
+                )
+                
+                # Use automatic mask detection to remove background
+                mask_ref = MaskReferenceImage(
+                    reference_id=1,
+                    reference_image=None,  # No mask image - let Imagen auto-detect
+                    config=MaskReferenceConfig(
+                        mask_mode="MASK_MODE_BACKGROUND",  # Remove background automatically
+                    ),
+                )
+                
+                # Create removal prompt
+                removal_prompt = prompt or "Remove the background, keep only the main product/object"
+                
+                # Make the edit_image call for background removal
+                def _call_imagen_removal():
+                    return self.genai_client.models.edit_image(
+                        model=self.imagen_edit_model,
+                        prompt=removal_prompt,
+                        reference_images=[raw_ref, mask_ref],
+                        config=EditImageConfig(
+                            edit_mode="EDIT_MODE_INPAINT_REMOVAL",
+                        ),
+                    )
+                
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(None, _call_imagen_removal)
+                
+                # Extract the processed image data
+                if not response.generated_images or len(response.generated_images) == 0:
+                    raise Exception("No images generated by Imagen background removal")
+                
+                generated_image = response.generated_images[0]
+                cleaned_image_bytes = generated_image.image.image_bytes
+                
+                logger.info(f"Successfully removed background from product image ({len(cleaned_image_bytes)} bytes)")
+                return cleaned_image_bytes
+                
+            finally:
+                # Clean up temporary file
+                try:
+                    os.unlink(product_temp_path)
+                except:
+                    pass  # Ignore cleanup errors
+                
+        except Exception as e:
+            logger.error(f"Background removal failed: {str(e)}")
+            raise Exception(f"Failed to remove background from product image: {str(e)}")
+
+    async def _create_cleaned_product_url(self, cleaned_image_bytes: bytes) -> str:
+        """Upload cleaned product image to GCS and return signed URL."""
+        if not self.storage_client or not self.renders_bucket:
+            raise Exception("GCS storage not configured. Please ensure GCS_RENDERS_BUCKET is set.")
+        
+        try:
+            # Generate unique filename for cleaned product
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:8]
+            filename = f"cleaned_products/{timestamp}_{unique_id}.jpg"
+            
+            # Get bucket and create blob
+            bucket = self.storage_client.bucket(self.renders_bucket)
+            blob = bucket.blob(filename)
+            
+            # Upload cleaned image data
+            blob.upload_from_string(cleaned_image_bytes, content_type='image/jpeg')
+            logger.info(f"✅ Uploaded cleaned product to GCS: gs://{self.renders_bucket}/{filename}")
+            
+            # Generate signed URL (valid for 1 hour)
+            signed_url = blob.generate_signed_url(
+                expiration=datetime.utcnow() + timedelta(hours=1),
+                method='GET'
+            )
+            
+            return signed_url
+            
+        except Exception as e:
+            logger.error(f"Failed to upload cleaned product to GCS: {str(e)}")
+            raise Exception(f"Failed to upload cleaned product image: {str(e)}")
+
+    async def remove_background_only(self, product_image_url: str, 
+                                   removal_prompt: Optional[str] = None) -> str:
+        """Remove background from product image and return the cleaned image URL."""
+        try:
+            logger.info("Processing background removal request...")
+            
+            # Remove background from product image
+            cleaned_product_bytes = await self._remove_product_background(
+                product_image_url,
+                removal_prompt or "Remove the background, keep only the main product/object"
+            )
+            
+            # Upload cleaned product and get URL
+            cleaned_product_url = await self._create_cleaned_product_url(cleaned_product_bytes)
+            
+            logger.info(f"✅ Background removal completed: {cleaned_product_url}")
+            return cleaned_product_url
+            
+        except Exception as e:
+            logger.error(f"Error removing background: {str(e)}")
+            raise Exception(f"Failed to remove background: {str(e)}")
+
+    async def _create_product_description(self, product_image_bytes: bytes, product_image_url: str) -> str:
+        """Create a detailed description of the product for better preservation."""
+        if not self.gemini_client:
+            return f"Product from {product_image_url} with all original details, colors, textures, and branding"
+        
+        try:
+            # Save product image to temp file for Gemini analysis
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
+                temp_file.write(product_image_bytes)
+                temp_file_path = temp_file.name
+            
+            try:
+                # Create analysis prompt for Gemini
+                analysis_prompt = """
+                Analyze this product image and provide a detailed, specific description that would help recreate it exactly. Include:
+                
+                1. Product type and category
+                2. Specific colors (use color names like "deep red", "navy blue", etc.)
+                3. Textures and materials (glossy, matte, fabric, metal, etc.)
+                4. Any text, logos, or branding visible
+                5. Patterns, designs, or decorative elements
+                6. Shape, proportions, and structural details
+                7. Any unique or distinctive visual features
+                
+                Be very specific about colors, text, and visual elements. This description will be used to recreate the product exactly.
+                """
+                
+                # Call Gemini for product analysis
+                def _analyze_product():
+                    return self.gemini_client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=[
+                            analysis_prompt,
+                            GenAIImage.from_file(location=temp_file_path, mime_type="image/jpeg")
+                        ]
+                    )
+                
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(None, _analyze_product)
+                
+                description = response.text.strip()
+                logger.info(f"Generated detailed product description: {description[:100]}...")
+                return description
+                
+            finally:
+                # Clean up temp file
+                try:
+                    os.unlink(temp_file_path)
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.warning(f"Product description generation failed: {str(e)}")
+            return f"Product from {product_image_url} - preserve all original colors, textures, branding, text, logos, patterns, and visual details exactly as shown in the original image"
+
+    async def _create_downsampled_product_reference(self, product_image_bytes: bytes) -> str:
+        """Create a downsampled 64x64 base64 reference of the product image."""
+        try:
+            # Load and downsample the product image
+            product_image = Image.open(io.BytesIO(product_image_bytes))
+            
+            # Resize to 64x64 while maintaining aspect ratio
+            # Use LANCZOS for high-quality downsampling
+            downsampled = product_image.resize((256, 256), Image.Resampling.LANCZOS)
+            
+            # Convert to RGB if it's not already (to ensure JPEG compatibility)
+            if downsampled.mode != 'RGB':
+                downsampled = downsampled.convert('RGB')
+            
+            # Save to bytes
+            downsample_bytes = io.BytesIO()
+            downsampled.save(downsample_bytes, format='JPEG', quality=95, optimize=True)
+            downsample_bytes.seek(0)
+            
+            # Convert to base64
+            import base64
+            base64_data = base64.b64encode(downsample_bytes.getvalue()).decode('utf-8')
+            
+            logger.info(f"Created 64x64 downsampled reference ({len(base64_data)} base64 chars)")
+            return base64_data
+            
+        except Exception as e:
+            logger.error(f"Failed to create downsampled reference: {str(e)}")
+            raise Exception(f"Failed to create downsampled product reference: {str(e)}")
+
     async def _create_mask(self, base_image_bytes: bytes, placement: ProductPlacement, 
                           product_image_bytes: bytes) -> bytes:
         """Create a mask for the product placement area."""
@@ -206,8 +433,8 @@ class ProductVisualizerRecontext:
             product_width, product_height = product_image.size
             product_aspect = product_width / product_height
             
-            # Calculate mask dimensions based on placement
-            mask_width = int(width * placement.scale * 0.3)  # 30% of image width at scale 1.0
+            # Calculate mask dimensions based on placement - make it larger for full utilization
+            mask_width = int(width * placement.scale * 0.4)  # 40% of image width at scale 1.0 for better fill
             mask_height = int(mask_width / product_aspect)
             
             # Calculate position
@@ -282,26 +509,53 @@ Ensure the product looks naturally placed while keeping the rest of the image un
                 mask_temp_path = mask_temp.name
             
             try:
-                raw_ref = RawReferenceImage(
+                # Base image reference (only raw image allowed for inpaint insertion)
+                base_ref = RawReferenceImage(
                     reference_image=GenAIImage.from_file(location=base_temp_path),
                     reference_id=0,
                 )
                 
+                # Mask reference for where to place the product
                 mask_ref = MaskReferenceImage(
                     reference_id=1,
                     reference_image=GenAIImage.from_file(location=mask_temp_path),
                     config=MaskReferenceConfig(
                         mask_mode="MASK_MODE_USER_PROVIDED",
-                        mask_dilation=0.01,
+                        mask_dilation=0.01,  # Minimal dilation to preserve full mask area
                     ),
                 )
+                
+                # Downsample product image to 64x64 and convert to base64
+                downsampled_base64 = await self._create_downsampled_product_reference(product_image_bytes)
+                
+                # Enhanced prompt with downsampled product reference
+                enhanced_prompt = f"""
+                {prompt}
+
+                Blend the exact product shown in this reference image into the masked area:
+                data:image/jpeg;base64,{downsampled_base64}
+
+                CRITICAL REQUIREMENTS:
+                - Do not modify, stylize, or reinterpret the product's design in any way
+                - Do not generate a new product, just blend the provided product image into the scene
+                - Recreate the EXACT product shown in the reference image above
+                - SCALE the product to FILL the entire masked area while maintaining its aspect ratio
+                - The product should occupy the full width and height of the masked region
+                - Preserve all colors, textures, text, logos, patterns, and visual characteristics exactly as shown
+                - Only adjust lighting, shadows, and perspective to match the base scene naturally
+                - Ensure realistic integration with proper positioning
+                - The product should look like it was physically placed in the scene at the correct size
+
+                SCALING INSTRUCTION: Make the product large enough to utilize the complete masked area provided.
+                The reference image shows the exact product to recreate - use it as your visual guide for accuracy.
+                """
                 
                 # Make the edit_image call using the Python SDK
                 def _call_imagen():
                     return self.genai_client.models.edit_image(
                         model=self.imagen_edit_model,
-                        prompt=prompt,
-                        reference_images=[raw_ref, mask_ref],
+                        prompt=enhanced_prompt,
+                        reference_images=[base_ref, mask_ref],  # Only base image and mask
                         config=EditImageConfig(
                             edit_mode="EDIT_MODE_INPAINT_INSERTION",
                         ),
@@ -336,26 +590,41 @@ Ensure the product looks naturally placed while keeping the rest of the image un
         except Exception as e:
             logger.error(f"Imagen Editing generation failed: {str(e)}")
             raise Exception(f"Failed to generate visualization with Imagen Editing: {str(e)}")
-    
-    async def visualize_product(self, request: VisualizeProductRequest) -> VisualizeProductResponse:
+        
+    async def visualize_product(self, request: VisualizeProductRequest, 
+                               remove_background: bool = True) -> VisualizeProductResponse:
         """Visualize product in user photo using Vertex AI Imagen 3.0 Editing & Customization."""
         try:
             start_time = time.time()
             
-            # Step 1: Use Gemini to infer optimal placement for mask generation
+            # Step 1: Optionally remove background from product image
+            product_image_url = request.product_image_url
+            if remove_background:
+                logger.info("Removing background from product image...")
+                try:
+                    cleaned_product_bytes = await self._remove_product_background(
+                        request.product_image_url,
+                        "Remove the background, keep only the main product/object"
+                    )
+                    product_image_url = await self._create_cleaned_product_url(cleaned_product_bytes)
+                    logger.info(f"✅ Background removed, using cleaned product: {product_image_url}")
+                except Exception as e:
+                    logger.warning(f"Background removal failed, using original product image: {str(e)}")
+                    product_image_url = request.product_image_url
+            
+            # Step 2: Use Gemini to infer optimal placement for mask generation
             logger.info("Inferring optimal placement using Gemini...")
             placement = await self._infer_placement_with_gemini(
                 request.base_image_url,
-                request.product_image_url,
+                product_image_url,  # Use cleaned product URL if available
                 request.prompt
             )
             
-            # Step 2: Generate the visualization using Imagen 3.0 Editing
-            
+            # Step 3: Generate the visualization using Imagen 3.0 Editing
             logger.info("Generating visualization with Vertex AI Imagen 3.0 Editing...")
             render_url = await self._generate_with_imagen_editing(
                 request.base_image_url,
-                request.product_image_url,
+                product_image_url,  # Use cleaned product URL if available
                 placement,
                 request.prompt
             )

@@ -23,7 +23,7 @@ service ImageAssistantService {
   // Analyze image for objects, scene type, styles, colors
   rpc AnalyzeImage(AnalyzeImageRequest) returns (AnalyzeImageResponse);
   
-  // Visualize product inside a user photo (render overlay)
+  // Visualize product in user photo using Gemini 2.5 Flash Image Preview
   rpc VisualizeProduct(VisualizeProductRequest) returns (VisualizeProductResponse);
   
   // Health check
@@ -45,25 +45,7 @@ message BoundingBox {
   float h = 4;
 }
 
-// Product placement configuration
-message ProductPlacement {
-  Position position = 1;
-  float scale = 2;
-  float rotation = 3;
-  string occlusion_mask_url = 4;
-}
 
-// Position coordinates
-message Position {
-  float x = 1;
-  float y = 2;
-}
-
-// Render metadata
-message RenderMetadata {
-  int32 latency_ms = 1;
-  int64 seed = 2;
-}
 
 // Analyze image request
 message AnalyzeImageRequest {
@@ -82,21 +64,28 @@ message AnalyzeImageResponse {
   string message = 7;
 }
 
-// Visualize product request
+// Product visualization request
 message VisualizeProductRequest {
   string base_image_url = 1;
   string product_image_url = 2;
-  ProductPlacement placement = 3;
-  string prompt = 4;
+  string prompt = 3;
 }
 
-// Visualize product response
+// Product visualization response
 message VisualizeProductResponse {
   string render_url = 1;
   RenderMetadata metadata = 2;
   bool success = 3;
   string message = 4;
 }
+
+// Render metadata
+message RenderMetadata {
+  int32 latency_ms = 1;
+  string seed = 2;
+}
+
+
 
 // Health check messages
 message HealthCheckRequest {

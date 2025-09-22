@@ -44,7 +44,7 @@ class ImageAssistantServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def VisualizeProduct(self, request, context):
-        """Visualize product inside a user photo (render overlay)
+        """Visualize product in user photo using Gemini 2.5 Flash Image Preview
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

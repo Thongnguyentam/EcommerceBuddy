@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from genproto import imageassistant_pb2, imageassistant_pb2_grpc
 from image_analyzer import ImageAnalyzer
-from product_visualizer import ProductVisualizer
+from product_visualizer_gemini import ProductVisualizerGemini
 from models import AnalyzeImageRequest, VisualizeProductRequest
 
 # Configure logging
@@ -33,7 +33,7 @@ class ImageAssistantServicer(imageassistant_pb2_grpc.ImageAssistantServiceServic
     
     def __init__(self):
         self.image_analyzer = ImageAnalyzer()
-        self.product_visualizer = ProductVisualizer()
+        self.product_visualizer = ProductVisualizerGemini()
     
     def _set_error(self, context, code, details):
         """Set error code and details if context is available."""
@@ -95,25 +95,23 @@ class ImageAssistantServicer(imageassistant_pb2_grpc.ImageAssistantServiceServic
             )
     
     async def VisualizeProduct(self, request, context):
-        """Visualize product inside a user photo using Gemini placement inference."""
+        """Visualize product in user photo using Gemini 2.5 Flash Image Preview."""
         try:
-            # Convert protobuf request to Pydantic model (no placement - Gemini handles it)
+            # Convert protobuf request to Pydantic model
             visualize_request = VisualizeProductRequest(
                 base_image_url=request.base_image_url,
                 product_image_url=request.product_image_url,
-                prompt=request.prompt if request.prompt else None
+                prompt=request.prompt if request.prompt else "Place this product naturally in the scene"
             )
             
             # Visualize product
             result = await self.product_visualizer.visualize_product(visualize_request)
             
             # Convert to protobuf response
-            proto_metadata = None
-            if result.metadata:
-                proto_metadata = imageassistant_pb2.RenderMetadata(
-                    latency_ms=result.metadata.latency_ms or 0,
-                    seed=result.metadata.seed or 0
-                )
+            proto_metadata = imageassistant_pb2.RenderMetadata(
+                latency_ms=result.metadata.latency_ms,
+                seed=result.metadata.seed or ""
+            )
             
             return imageassistant_pb2.VisualizeProductResponse(
                 render_url=result.render_url,
