@@ -1,3 +1,5 @@
+# 🚀 **EcommerceBuddy – The Ultimate AI-Powered Online Shopping Hub**
+
 <!-- <p align="center">
 <img src="/src/frontend/static/icons/Hipster_HeroLogoMaroon.svg" width="300" alt="Online Boutique" />
 </p> -->
@@ -6,7 +8,9 @@
 **Online Boutique** is a cloud-first microservices demo application.  The application is a
 web-based e-commerce app where users can browse items, add them to the cart, and purchase them.
 
-Google uses this application to demonstrate how developers can modernize enterprise applications using Google Cloud products, including: [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine), [Cloud Service Mesh (CSM)](https://cloud.google.com/service-mesh), [gRPC](https://grpc.io/), [Cloud Operations](https://cloud.google.com/products/operations), [Spanner](https://cloud.google.com/spanner), [Memorystore](https://cloud.google.com/memorystore), [AlloyDB](https://cloud.google.com/alloydb), and [Gemini](https://ai.google.dev/). This application works on any Kubernetes cluster.
+**🤖 NEW: AI-Powered Shopping Agents** - This application now features an advanced AI agent system powered by **Gemini 2.5 Flash** that provides intelligent shopping assistance through natural language conversations, image analysis, and personalized product recommendations.
+
+Google uses this application to demonstrate how developers can modernize enterprise applications using Google Cloud products, including: [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine), [Cloud Service Mesh (CSM)](https://cloud.google.com/service-mesh), [gRPC](https://grpc.io/), [Cloud Operations](https://cloud.google.com/products/operations), [Spanner](https://cloud.google.com/spanner), [Memorystore](https://cloud.google.com/memorystore), [AlloyDB](https://cloud.google.com/alloydb), **[Gemini](https://ai.google.dev/)**, **[Vertex AI](https://cloud.google.com/vertex-ai)**, **[Cloud SQL](https://cloud.google.com/sql)**, and **[Cloud Storage](https://cloud.google.com/storage)**. This application works on any Kubernetes cluster.
 
 If you’re using this demo, please **★Star** this repository to show your interest!
 
@@ -14,19 +18,25 @@ If you’re using this demo, please **★Star** this repository to show your int
 
 ## Architecture
 
-**Online Boutique** is composed of 11 microservices written in different
-languages that talk to each other over gRPC.
+**Online Boutique** is composed of **16 microservices** (11 original + 5 AI-powered) written in different
+languages that talk to each other over gRPC and HTTP APIs.
 
 [![Architecture of
 microservices](/docs/img/architecture-diagram.png)](/docs/img/architecture-diagram.png)
 
-Find **Protocol Buffers Descriptions** at the [`./protos` directory](/protos).
+### 🤖 NEW AI Agent System Architecture
+
+The application now includes an **intelligent agent orchestration system** that coordinates multiple specialized AI agents:
+
+![Architecture of microservices](https://drive.google.com/uc?id=1oE618tiLCXiHIso8NOjbdNT4ADwIDrV-)
+
+### Core E-commerce Services
 
 | Service                                              | Language      | Description                                                                                                                       |
 | ---------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | [frontend](/src/frontend)                           | Go            | Exposes an HTTP server to serve the website. Does not require signup/login and generates session IDs for all users automatically. |
 | [cartservice](/src/cartservice)                     | C#            | Stores the items in the user's shopping cart in Redis and retrieves it.                                                           |
-| [productcatalogservice](/src/productcatalogservice) | Go            | Provides the list of products from a JSON file and ability to search products and get individual products.                        |
+| [productcatalogservice](/src/productcatalogservice) | Go            | **🧠 Enhanced with RAG**: Provides semantic search using Vertex AI embeddings and Cloud SQL. Supports natural language product queries. |
 | [currencyservice](/src/currencyservice)             | Node.js       | Converts one money amount to another currency. Uses real values fetched from European Central Bank. It's the highest QPS service. |
 | [paymentservice](/src/paymentservice)               | Node.js       | Charges the given credit card info (mock) with the given amount and returns a transaction ID.                                     |
 | [shippingservice](/src/shippingservice)             | Go            | Gives shipping cost estimates based on the shopping cart. Ships items to the given address (mock)                                 |
@@ -35,6 +45,94 @@ Find **Protocol Buffers Descriptions** at the [`./protos` directory](/protos).
 | [recommendationservice](/src/recommendationservice) | Python        | Recommends other products based on what's given in the cart.                                                                      |
 | [adservice](/src/adservice)                         | Java          | Provides text ads based on given context words.                                                                                   |
 | [loadgenerator](/src/loadgenerator)                 | Python/Locust | Continuously sends requests imitating realistic user shopping flows to the frontend.                                              |
+
+### 🤖 AI-Powered Services & Agents
+
+| Service                                              | Language      | Google Cloud Technologies | Description                                                                                                                       |
+| ---------------------------------------------------- | ------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| [**agentservice**](/src/agentservice)               | Python        | **Gemini 2.5 Flash**, Vertex AI | **Orchestrator + Domain Agents**: Coordinates intelligent shopping workflows across specialized AI agents for natural language shopping assistance. |
+| [**mcpserver**](/src/mcpserver)                     | Python        | FastAPI, Cloud Run | **Tool Discovery Hub**: Centralized Model Context Protocol server that exposes all microservice operations as discoverable AI tools. |
+| [**imageassistantservice**](/src/imageassistantservice) | Python    | **Gemini 2.5 Flash Image**, Vision API, Cloud Storage | **"Nano Banana" Visualizer**: Advanced image analysis and AI-powered product visualization using Gemini 2.5 Flash Image Preview. |
+| [**reviewservice**](/src/reviewservice)             | Python        | **Cloud SQL**, AlloyDB | **Review Intelligence**: gRPC service for product reviews with sentiment analysis and review aggregation. |
+| [**embeddingservice**](/src/embeddingservice)       | Python        | **Vertex AI Embeddings** | **Semantic Understanding**: Generates text embeddings using Vertex AI's text-embedding-004 model for semantic search. |
+| [**embeddingworker**](/src/embeddingworker)         | Python        | **Cloud SQL**, PostgreSQL LISTEN/NOTIFY | **Real-time RAG**: Event-driven worker that automatically generates embeddings when product data changes. |
+
+## 🤖 AI Agent Workflow & Capabilities
+
+### Intelligent Shopping Assistant
+
+The AI agent system provides a **conversational shopping experience** powered by **Gemini 2.5 Flash**:
+
+#### 🧠 **Orchestrator Agent**
+- **Natural Language Understanding**: Analyzes user queries to determine intent and required services
+- **Workflow Planning**: Creates multi-step plans across different domain agents
+- **Tool Discovery**: Dynamically discovers available tools through the MCP server
+- **Response Synthesis**: Combines results from multiple agents into coherent responses
+
+#### 🎯 **Specialized Domain Agents**
+- **🛍️ Product Agent**: Semantic product search using RAG with Vertex AI embeddings
+- **🖼️ Image Agent**: Advanced image analysis and "Nano Banana" product visualization
+- **🛒 Cart Agent**: Intelligent cart management and recommendations
+- **💰 Currency Agent**: Multi-currency support with real-time conversion
+- **⭐ Sentiment Agent**: Review analysis and sentiment-based recommendations
+
+### Key AI Features
+
+#### 🔍 **Semantic Product Search**
+```
+User: "Find me a cozy reading chair for a small apartment"
+→ Product Agent uses RAG to search embeddings in Cloud SQL
+→ Returns semantically relevant furniture with style matching
+```
+
+#### 🎨 **"Nano Banana" Product Visualization**
+```
+User: "Show me how this vase would look in my living room [image]"
+→ Image Agent analyzes room image with Vision API
+→ Gemini 2.5 Flash Image Preview generates photorealistic visualization
+→ Result stored in Cloud Storage with signed URL
+```
+
+#### 💬 **Multi-turn Conversations**
+```
+User: "I need furniture for my home office"
+→ Agent: Shows desk options
+User: "Something more modern"
+→ Agent: Refines search using conversation context
+User: "Add the white desk to my cart"
+→ Agent: Processes cart addition and suggests accessories
+```
+
+#### 📊 **Review Intelligence**
+```
+User: "What do people think about this chair?"
+→ Review Service aggregates sentiment from Cloud SQL
+→ Sentiment Agent provides summary with key themes
+→ Includes rating distribution and highlight quotes
+```
+
+### Google Cloud AI Stack Integration
+
+| AI Capability | Google Cloud Service | Implementation |
+|---------------|---------------------|----------------|
+| **Natural Language** | **Gemini 2.5 Flash** | Agent reasoning, conversation, planning |
+| **Image Understanding** | **Vision API + Gemini** | Object detection, scene analysis |
+| **Product Visualization** | **Gemini 2.5 Flash Image** | Photorealistic product placement |
+| **Semantic Search** | **Vertex AI Embeddings** | RAG with text-embedding-004 model |
+| **Vector Storage** | **Cloud SQL + pgvector** | High-performance semantic search |
+| **Real-time Processing** | **PostgreSQL LISTEN/NOTIFY** | Event-driven embedding generation |
+| **Secure Storage** | **Cloud Storage** | Generated images with signed URLs |
+
+### Service Documentation
+
+For detailed implementation guides:
+- **[Agent Service](/src/agentservice)** - Multi-agent orchestration system
+- **[MCP Server](/src/mcpserver)** - Tool discovery and coordination hub  
+- **[Image Assistant](/src/imageassistantservice/README.md)** - "Nano Banana" visualization engine
+- **[Review Service](/src/reviewservice/README.md)** - Intelligent review management
+- **[Product Catalog](/src/productcatalogservice/README.md)** - RAG-enhanced product search
+- **[Embedding Service](/src/embeddingservice/README.md)** - Vertex AI embedding generation
+- **[Embedding Worker](/src/embeddingworker/Readme.md)** - Real-time RAG processing
 
 ## Screenshots
 
@@ -131,7 +229,15 @@ Find **Protocol Buffers Descriptions** at the [`./protos` directory](/protos).
 - **Terraform**: [See these instructions](/terraform) to learn how to deploy Online Boutique using [Terraform](https://www.terraform.io/intro).
 - **Istio / Cloud Service Mesh**: [See these instructions](/kustomize/components/service-mesh-istio/README.md) to deploy Online Boutique alongside an Istio-backed service mesh.
 - **Non-GKE clusters (Minikube, Kind, etc)**: See the [Development guide](/docs/development-guide.md) to learn how you can deploy Online Boutique on non-GKE clusters.
-- **AI assistant using Gemini**: [See these instructions](/kustomize/components/shopping-assistant/README.md) to deploy a Gemini-powered AI assistant that suggests products to purchase based on an image.
+- **🤖 AI Shopping Agents**: Deploy the full AI agent system with Gemini 2.5 Flash, semantic search, and "Nano Banana" product visualization:
+  ```bash
+  # Deploy with AI agents and Cloud SQL
+  cd kustomization
+  kubectl apply -k .
+  ```
+- **🧠 RAG-Enhanced Product Search**: Enable semantic search with Vertex AI embeddings and Cloud SQL vector storage
+- **📊 Review Intelligence**: Deploy review service with sentiment analysis and Cloud SQL integration
+- **🎨 "Nano Banana" Image Generation**: Advanced product visualization using Gemini 2.5 Flash Image Preview
 - **And more**: The [`/kustomize` directory](/kustomize) contains instructions for customizing the deployment of Online Boutique with other variations.
 
 ## Documentation
