@@ -28,6 +28,8 @@ resources:
  - recommendationservice.yaml
  - shippingservice.yaml
  - imageassistantservice.yaml  # New AI-powered image analysis and product visualization service
+ - adkwebui.yaml  # ADK Web UI for agent interaction
+ - agentservice.yaml
 components:
 # - ../kustomize/components/cymbal-branding
 # - ../kustomize/components/google-cloud-operations

@@ -18,6 +18,7 @@ spec:
       containers:
       - name: server
         image: gcr.io/gke-hack-471804/mcpserver:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http

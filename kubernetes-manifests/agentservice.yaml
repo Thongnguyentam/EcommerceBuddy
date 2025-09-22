@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentservice
+  labels:
+    app: agentservice
+spec:
+  selector:
+    matchLabels:
+      app: agentservice
+  template:
+    metadata:
+      labels:
+        app: agentservice
+    spec:
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: gcr.io/gke-hack-471804/agentservice:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: AGENT_SERVICE_PORT
+          value: "8080"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: MCP_BASE_URL
+          value: "http://mcpserver:8080"
+        - name: GOOGLE_CLOUD_PROJECT
+          valueFrom:
+            configMapKeyRef:
+              name: env-config
+              key: GOOGLE_CLOUD_PROJECT
+        - name: GOOGLE_CLOUD_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: env-config
+              key: GOOGLE_CLOUD_REGION
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 2
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      volumes:
+      - emptyDir: {}
+        name: tmp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentservice
+  labels:
+    app: agentservice
+spec:
+  type: ClusterIP
+  selector:
+    app: agentservice
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080 

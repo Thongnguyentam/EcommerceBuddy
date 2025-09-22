@@ -12,8 +12,8 @@ import json
 import logging
 import uuid
 from typing import Dict, Any, List, Optional
-from base_agent import BaseAgent
-from utils import clean_and_parse_json, validate_tool_plan
+from agents.base_agent import BaseAgent
+from agents.utils import clean_and_parse_json, validate_tool_plan
 logger = logging.getLogger(__name__)
 
 class ProductAgent(BaseAgent):
