@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Image Agent Testing Script
+Sentiment Agent Testing Script
 
-Test the Image Agent with multiple queries to ensure it works correctly.
+Test the Sentiment Agent with multiple queries to ensure it works correctly.
 """
 
 import asyncio
@@ -22,7 +22,7 @@ import vertexai
 from google import genai
 
 # Import agents after path setup
-from image_agent import ImageAgent
+from sentiment_agent import SentimentAgent
 
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 GOOGLE_CLOUD_REGION = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
@@ -39,27 +39,57 @@ async def discover_tools_from_mcp(mcp_url: str) -> dict:
         print("Make sure MCP server is running and accessible")
         return {"tools": []}
 
-async def test_image_agent_multiple_queries(mcp_url: str, tools_schema: dict):
-    """Test the Image Agent with multiple different queries."""
-    print("🖼️ Testing Image Agent with Multiple Queries")
+async def test_sentiment_agent_multiple_queries(mcp_url: str, tools_schema: dict):
+    """Test the Sentiment Agent with multiple different queries."""
+    print("💭 Testing Sentiment Agent with Multiple Queries")
     print("-" * 50)
     
-    # Test queries with sample image URLs
+    # Test queries targeting specific review/sentiment tools
     test_queries = [
         {
-            "message": "What objects do you see in this image?",
-            "description": "Object detection query",
-            "context": {
-                "image_url": "https://www.anvekitchenandbath.com/wp-content/uploads/2022/12/modern-minimalist-kitchen-1200x630-cropped.jpeg"
-            }
+            "message": "What are the reviews for product OLJCESPC7Z?",
+            "description": "Get product reviews (get_product_reviews tool)",
+            "user_id": None
         },
         {
-            "message": "Show me how this vase would look in my living room",
-            "description": "Product visualization request",
-            "context": {
-                "base_image_url": "https://edwardgeorgelondon.com/wp-content/uploads/2024/04/A-collection-of-inspiring-real-life-minimalist-living-room-designs-showcasing-clean-lines-neutral-color-palettes-and-functional-furniture-arrangements.png",
-                "product_image_url": "https://www.thespruce.com/thmb/d-xScDVrgsogzOFdGEXCBl8_7Bs=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/SPR-types-of-lamp-vases-7096026-01-779b17f2283e4a61b66bde573bae3370.jpg"
-            }
+            "message": "Show me the review summary for product 66VCHSJNUP",
+            "description": "Get review summary stats (get_product_review_summary tool)",
+            "user_id": None
+        },
+        {
+            "message": "I want to write a review for product OLJCESPC7Z - 5 stars, excellent quality!",
+            "description": "Create a product review (create_review tool)",
+            "user_id": "test_user_123"
+        },
+        {
+            "message": "Show me all my reviews",
+            "description": "Get user's own reviews (get_user_reviews tool)",
+            "user_id": "test_user_123"
+        },
+        {
+            "message": "What do customers think about product 2ZYFJ3GM2N?",
+            "description": "Another product reviews query (get_product_reviews tool)",
+            "user_id": None
+        },
+        {
+            "message": "Give me a sentiment analysis of product L9ECAV7KIM",
+            "description": "Product sentiment analysis (get_product_review_summary tool)",
+            "user_id": None
+        },
+        {
+            "message": "I need to update my review with ID 1 - change rating to 4 stars",
+            "description": "Update existing review (update_review tool)",
+            "user_id": "test_user_123"
+        },
+        {
+            "message": "Delete review number 2",
+            "description": "Delete a review (delete_review tool)",
+            "user_id": "test_user_123"
+        },
+        {
+            "message": "How is the overall rating for product 9SIQT8TOJO?",
+            "description": "Overall product rating analysis (get_product_review_summary tool)",
+            "user_id": None
         }
     ]
     
@@ -72,8 +102,9 @@ async def test_image_agent_multiple_queries(mcp_url: str, tools_schema: dict):
         gemini_client = genai.Client(vertexai=True, project=project_id, location=location)
         
         # Initialize HTTP client
-        http_client = httpx.AsyncClient(timeout=120.0)  # Longer timeout for image processing    
-        agent = ImageAgent(
+        http_client = httpx.AsyncClient(timeout=60.0)
+        
+        agent = SentimentAgent(
             gemini_client=gemini_client,
             http_client=http_client,
             mcp_base_url=mcp_url,
@@ -84,27 +115,27 @@ async def test_image_agent_multiple_queries(mcp_url: str, tools_schema: dict):
         for i, test_case in enumerate(test_queries, 1):
             print(f"\n📝 Test {i}: {test_case['description']}")
             print(f"Query: {test_case['message']}")
+            print(f"User ID: {test_case['user_id'] or 'Not required'}")
             
             try:
                 result = await agent.process_request(
                     message=test_case['message'],
-                    user_id="test_user_123",
-                    session_id=f"image_test_{i}",
-                    context=test_case.get('context', {})
+                    user_id=test_case['user_id'],
+                    session_id=f"sentiment_test_{i}"
                 )
                 
                 print(f"✅ Agent: {result['agent_used']}")
                 print(f"✅ Tools called: {result['tools_called']}")
-                print(f"✅ Response preview: {result['response']}...")
+                print(f"✅ Response preview: {result['response'][:150]}...")
                 
             except Exception as e:
                 print(f"❌ Test {i} failed: {str(e)}")
         
         await http_client.aclose()
-        print(f"\n🎉 Image Agent testing completed!")
+        print(f"\n🎉 Sentiment Agent testing completed!")
         
     except Exception as e:
-        print(f"❌ Image Agent setup failed: {str(e)}")
+        print(f"❌ Sentiment Agent setup failed: {str(e)}")
 
 async def test_base_agent_functionality(mcp_url: str, tools_schema: dict):
     """Test base agent functionality."""
@@ -122,7 +153,7 @@ async def test_base_agent_functionality(mcp_url: str, tools_schema: dict):
         # Initialize HTTP client
         http_client = httpx.AsyncClient(timeout=30.0)
         
-        agent = ImageAgent(
+        agent = SentimentAgent(
             gemini_client=gemini_client,
             http_client=http_client,
             mcp_base_url=mcp_url,
@@ -130,8 +161,8 @@ async def test_base_agent_functionality(mcp_url: str, tools_schema: dict):
         )
         
         # Test response generation
-        response = await agent.generate_response("What is image analysis?")
-        print(f"✅ Response generation: {response}...")
+        response = await agent.generate_response("What is sentiment analysis?")
+        print(f"✅ Response generation: {response[:100]}...")
         
         # Test tool filtering
         available_tools = agent.get_available_tools()
@@ -144,7 +175,7 @@ async def test_base_agent_functionality(mcp_url: str, tools_schema: dict):
 
 async def main():
     """Main test function."""
-    print("🚀 Image Agent Testing")
+    print("🚀 Sentiment Agent Testing")
     print("=" * 50)
     
     # Check environment variables
@@ -179,14 +210,14 @@ async def main():
     
     # Run tests
     await test_base_agent_functionality(mcp_url, tools_schema)
-    await test_image_agent_multiple_queries(mcp_url, tools_schema)
+    await test_sentiment_agent_multiple_queries(mcp_url, tools_schema)
     
     print("\n" + "=" * 50)
-    print("🏁 Image agent testing completed!")
+    print("🏁 Sentiment agent testing completed!")
 
 if __name__ == "__main__":
-    print("Image Agent Test")
-    print("This script tests the Image Agent with multiple queries")
+    print("Sentiment Agent Test")
+    print("This script tests the Sentiment Agent with multiple queries")
     print("Make sure your .env file is configured with GOOGLE_CLOUD_PROJECT")
     print()
     print("For local testing:")

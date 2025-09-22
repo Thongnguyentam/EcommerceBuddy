@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Image Agent Testing Script
+Cart Agent Testing Script
 
-Test the Image Agent with multiple queries to ensure it works correctly.
+Test the Cart Agent with multiple queries to ensure it works correctly.
 """
 
 import asyncio
@@ -22,7 +22,7 @@ import vertexai
 from google import genai
 
 # Import agents after path setup
-from image_agent import ImageAgent
+from cart_agent import CartAgent
 
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 GOOGLE_CLOUD_REGION = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
@@ -39,27 +39,47 @@ async def discover_tools_from_mcp(mcp_url: str) -> dict:
         print("Make sure MCP server is running and accessible")
         return {"tools": []}
 
-async def test_image_agent_multiple_queries(mcp_url: str, tools_schema: dict):
-    """Test the Image Agent with multiple different queries."""
-    print("🖼️ Testing Image Agent with Multiple Queries")
+async def test_cart_agent_multiple_queries(mcp_url: str, tools_schema: dict):
+    """Test the Cart Agent with multiple different queries."""
+    print("🛒 Testing Cart Agent with Multiple Queries")
     print("-" * 50)
     
-    # Test queries with sample image URLs
+    # Test queries targeting specific cart tools
     test_queries = [
         {
-            "message": "What objects do you see in this image?",
-            "description": "Object detection query",
-            "context": {
-                "image_url": "https://www.anvekitchenandbath.com/wp-content/uploads/2022/12/modern-minimalist-kitchen-1200x630-cropped.jpeg"
-            }
+            "message": "Add product OLJCESPC7Z to my cart, quantity 2",
+            "description": "Add specific product to cart (add_to_cart tool)",
+            "user_id": "test_user_123"
         },
         {
-            "message": "Show me how this vase would look in my living room",
-            "description": "Product visualization request",
-            "context": {
-                "base_image_url": "https://edwardgeorgelondon.com/wp-content/uploads/2024/04/A-collection-of-inspiring-real-life-minimalist-living-room-designs-showcasing-clean-lines-neutral-color-palettes-and-functional-furniture-arrangements.png",
-                "product_image_url": "https://www.thespruce.com/thmb/d-xScDVrgsogzOFdGEXCBl8_7Bs=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/SPR-types-of-lamp-vases-7096026-01-779b17f2283e4a61b66bde573bae3370.jpg"
-            }
+            "message": "What's currently in my shopping cart?",
+            "description": "View cart contents (get_cart_contents tool)",
+            "user_id": "test_user_123"
+        },
+        {
+            "message": "Add 3 units of product 66VCHSJNUP to my cart",
+            "description": "Add different product with quantity (add_to_cart tool)",
+            "user_id": "test_user_123"
+        },
+        {
+            "message": "Show me everything in my cart",
+            "description": "Another cart contents query (get_cart_contents tool)",
+            "user_id": "test_user_123"
+        },
+        {
+            "message": "I want to add the decorative plant to my cart",
+            "description": "Add item by description (add_to_cart tool)",
+            "user_id": "test_user_123"
+        },
+        {
+            "message": "Clear my entire shopping cart",
+            "description": "Clear all items from cart (clear_cart tool)",
+            "user_id": "test_user_123"
+        },
+        {
+            "message": "Empty my cart please",
+            "description": "Alternative clear cart request (clear_cart tool)",
+            "user_id": "test_user_123"
         }
     ]
     
@@ -72,8 +92,9 @@ async def test_image_agent_multiple_queries(mcp_url: str, tools_schema: dict):
         gemini_client = genai.Client(vertexai=True, project=project_id, location=location)
         
         # Initialize HTTP client
-        http_client = httpx.AsyncClient(timeout=120.0)  # Longer timeout for image processing    
-        agent = ImageAgent(
+        http_client = httpx.AsyncClient(timeout=60.0)
+        
+        agent = CartAgent(
             gemini_client=gemini_client,
             http_client=http_client,
             mcp_base_url=mcp_url,
@@ -84,27 +105,27 @@ async def test_image_agent_multiple_queries(mcp_url: str, tools_schema: dict):
         for i, test_case in enumerate(test_queries, 1):
             print(f"\n📝 Test {i}: {test_case['description']}")
             print(f"Query: {test_case['message']}")
+            print(f"User ID: {test_case['user_id']}")
             
             try:
                 result = await agent.process_request(
                     message=test_case['message'],
-                    user_id="test_user_123",
-                    session_id=f"image_test_{i}",
-                    context=test_case.get('context', {})
+                    user_id=test_case['user_id'],
+                    session_id=f"cart_test_{i}"
                 )
                 
                 print(f"✅ Agent: {result['agent_used']}")
                 print(f"✅ Tools called: {result['tools_called']}")
-                print(f"✅ Response preview: {result['response']}...")
+                print(f"✅ Response preview: {result['response'][:150]}...")
                 
             except Exception as e:
                 print(f"❌ Test {i} failed: {str(e)}")
         
         await http_client.aclose()
-        print(f"\n🎉 Image Agent testing completed!")
+        print(f"\n🎉 Cart Agent testing completed!")
         
     except Exception as e:
-        print(f"❌ Image Agent setup failed: {str(e)}")
+        print(f"❌ Cart Agent setup failed: {str(e)}")
 
 async def test_base_agent_functionality(mcp_url: str, tools_schema: dict):
     """Test base agent functionality."""
@@ -122,7 +143,7 @@ async def test_base_agent_functionality(mcp_url: str, tools_schema: dict):
         # Initialize HTTP client
         http_client = httpx.AsyncClient(timeout=30.0)
         
-        agent = ImageAgent(
+        agent = CartAgent(
             gemini_client=gemini_client,
             http_client=http_client,
             mcp_base_url=mcp_url,
@@ -130,8 +151,8 @@ async def test_base_agent_functionality(mcp_url: str, tools_schema: dict):
         )
         
         # Test response generation
-        response = await agent.generate_response("What is image analysis?")
-        print(f"✅ Response generation: {response}...")
+        response = await agent.generate_response("What is a shopping cart?")
+        print(f"✅ Response generation: {response[:100]}...")
         
         # Test tool filtering
         available_tools = agent.get_available_tools()
@@ -144,7 +165,7 @@ async def test_base_agent_functionality(mcp_url: str, tools_schema: dict):
 
 async def main():
     """Main test function."""
-    print("🚀 Image Agent Testing")
+    print("🚀 Cart Agent Testing")
     print("=" * 50)
     
     # Check environment variables
@@ -179,14 +200,14 @@ async def main():
     
     # Run tests
     await test_base_agent_functionality(mcp_url, tools_schema)
-    await test_image_agent_multiple_queries(mcp_url, tools_schema)
+    await test_cart_agent_multiple_queries(mcp_url, tools_schema)
     
     print("\n" + "=" * 50)
-    print("🏁 Image agent testing completed!")
+    print("🏁 Cart agent testing completed!")
 
 if __name__ == "__main__":
-    print("Image Agent Test")
-    print("This script tests the Image Agent with multiple queries")
+    print("Cart Agent Test")
+    print("This script tests the Cart Agent with multiple queries")
     print("Make sure your .env file is configured with GOOGLE_CLOUD_PROJECT")
     print()
     print("For local testing:")
