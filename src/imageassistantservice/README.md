@@ -1,115 +1,145 @@
 # Image Assistant Service
 
-A microservice that provides generic image analysis and product visualization capabilities using Google Cloud Vision API and Vertex AI Generative AI.
+A microservice that provides advanced image analysis and AI-powered product visualization using Google Cloud Vision API, Gemini 2.5 Flash, and Vertex AI.
 
 ## Features
 
-### 1. Image Analysis (`/analyze`)
-Analyzes images to detect:
-- **Objects**: Object detection with bounding boxes and confidence scores
-- **Scene Type**: Classification of scene type (indoor, outdoor, portrait, etc.)
-- **Styles**: Artistic or photographic style detection
-- **Colors**: Dominant color extraction
-- **Tags**: General descriptive tags
+### 1. 🔍 Intelligent Image Analysis (`AnalyzeImage`)
+Advanced image analysis combining Google Cloud Vision API with Gemini-powered style intelligence:
 
-**Input:**
-```json
-{
-  "image_url": "https://example.com/image.jpg",
-  "context": "optional context for analysis"
+- **Object Detection**: Precise object detection with bounding boxes and confidence scores
+- **Scene Classification**: AI-powered scene type detection (indoor, outdoor, portrait, product, etc.)
+- **Style Analysis**: Gemini-based artistic and photographic style detection
+- **Color Extraction**: Dominant color analysis with hex values
+- **Smart Tagging**: Context-aware descriptive tags
+
+**gRPC Request:**
+```protobuf
+message AnalyzeImageRequest {
+  string image_url = 1;
+  string context = 2;  // Optional context for better analysis
 }
 ```
 
-**Output:**
-```json
-{
-  "objects": [
-    {
-      "label": "person",
-      "confidence": 0.95,
-      "box": {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.6}
-    }
-  ],
-  "scene_type": "outdoor",
-  "styles": ["modern", "professional"],
-  "colors": ["#ff0000", "#00ff00"],
-  "tags": ["person", "building", "sky"]
+**gRPC Response:**
+```protobuf
+message AnalyzeImageResponse {
+  repeated DetectedObject objects = 1;
+  string scene_type = 2;
+  repeated string styles = 3;
+  repeated string colors = 4;
+  repeated string tags = 5;
+  bool success = 6;
+  string message = 7;
 }
 ```
 
-### 2. Product Visualization (`/visualize`)
-Renders product overlays in user photos using AI image generation:
+### 2. 🎨 AI Product Visualization (`VisualizeProduct`) - **Nano Banana**
+Revolutionary product visualization using **Gemini 2.5 Flash Image Preview** for photorealistic product placement:
 
-**Input:**
-```json
-{
-  "base_image_url": "https://example.com/room.jpg",
-  "product_image_url": "https://example.com/chair.jpg",
-  "placement": {
-    "position": {"x": 0.5, "y": 0.7},
-    "scale": 0.3,
-    "rotation": 15.0,
-    "occlusion_mask_url": "https://example.com/mask.jpg"
-  },
-  "prompt": "Place the chair naturally in the living room"
+**Key Features:**
+- **Intelligent Scene Analysis**: AI analyzes both base scene and product for optimal placement
+- **Realistic Integration**: Preserves exact product details while seamlessly blending with scene lighting
+- **Automatic Placement**: Smart positioning based on scene surfaces, perspective, and composition
+- **Photorealistic Results**: Natural shadows, reflections, and lighting adaptation
+
+**gRPC Request:**
+```protobuf
+message VisualizeProductRequest {
+  string base_image_url = 1;     // Scene/room image URL
+  string product_image_url = 2;  // Product image URL
+  string prompt = 3;             // Placement description
 }
 ```
 
-**Output:**
-```json
-{
-  "render_url": "https://storage.googleapis.com/renders/result.jpg",
-  "metadata": {
-    "latency_ms": 1500,
-    "seed": 12345
-  }
+**gRPC Response:**
+```protobuf
+message VisualizeProductResponse {
+  string render_url = 1;         // Generated image URL
+  RenderMetadata metadata = 2;   // Processing metadata
+  bool success = 3;
+  string message = 4;
 }
 ```
 
-## Architecture
+**Example Usage:**
+```python
+# Place decorative vase on table
+request = VisualizeProductRequest(
+    base_image_url="https://example.com/living-room.jpg",
+    product_image_url="https://example.com/vase.jpg",
+    prompt="Place this decorative vase on the coffee table"
+)
+```
 
-The service provides both **gRPC** and **HTTP REST** interfaces:
+## 🏗️ Architecture
 
-- **gRPC Server**: Port 8080 (default) - For high-performance inter-service communication
-- **HTTP Server**: Port 8000 (default) - For web client integration
-- **Health Checks**: Available on both protocols
+### Service Architecture
+- **gRPC Server**: Port 8080 - High-performance inter-service communication
+- **Async Processing**: Full asynchronous architecture for optimal throughput
+- **Multi-AI Integration**: Combines Vision API, Gemini 2.5 Flash, and intelligent analysis
 
-## Technology Stack
+### AI Pipeline
+```
+Image Input → Vision API Analysis → Gemini Style Analysis → Results
+Product Visualization: Base + Product → Scene Analysis → Gemini 2.5 Flash Image → Photorealistic Output
+```
 
-- **FastAPI**: HTTP REST API framework
-- **gRPC**: High-performance RPC framework
-- **Google Cloud Vision API**: Object detection and image analysis
-- **Vertex AI**: Generative AI for image manipulation
+## 🚀 Technology Stack
+
+### Core Framework
+- **gRPC**: High-performance RPC communication
+- **AsyncIO**: Asynchronous processing pipeline
 - **Pydantic**: Data validation and serialization
-- **AsyncIO**: Asynchronous processing
 
-## Setup
+### AI & ML Services
+- **Google Cloud Vision API**: Object detection and image properties
+- **Gemini 2.5 Flash**: Intelligent style and scene analysis
+- **Gemini 2.5 Flash Image Preview**: Advanced image generation for product visualization
+- **Vertex AI**: AI platform integration
 
-### Prerequisites
+### Infrastructure
+- **Google Cloud Storage**: Image storage and serving with signed URLs
+- **Workload Identity**: Secure GCP authentication in Kubernetes
+- **Docker**: Containerized deployment
 
-1. **Google Cloud Project** with the following APIs enabled:
-   - Vision API
-   - Vertex AI API
-   - Cloud Storage API (for image storage)
+## 📋 Prerequisites
 
-2. **Authentication**: Set up Application Default Credentials
+### Google Cloud Setup
+1. **Google Cloud Project** with APIs enabled:
    ```bash
-   gcloud auth application-default login
+   gcloud services enable vision.googleapis.com
+   gcloud services enable aiplatform.googleapis.com
+   gcloud services enable storage.googleapis.com
    ```
 
-3. **Environment Variables**:
+2. **Service Account**: Create with required permissions:
    ```bash
-   export GOOGLE_CLOUD_PROJECT="your-project-id"
-   export GOOGLE_CLOUD_REGION="us-central1"
-   export PORT="8080"              # gRPC port
-   export HTTP_PORT="8000"         # HTTP port
-   export ENABLE_HTTP="true"       # Enable HTTP server
+   gcloud iam service-accounts create imageassistant-sa \
+     --display-name="Image Assistant Service Account"
+   
+   gcloud projects add-iam-policy-binding PROJECT_ID \
+     --member="serviceAccount:imageassistant-sa@PROJECT_ID.iam.gserviceaccount.com" \
+     --role="roles/aiplatform.user"
+   
+   gcloud projects add-iam-policy-binding PROJECT_ID \
+     --member="serviceAccount:imageassistant-sa@PROJECT_ID.iam.gserviceaccount.com" \
+     --role="roles/storage.admin"
    ```
 
-### Local Development
+3. **GCS Bucket**: For storing generated visualizations:
+   ```bash
+   gsutil mb gs://PROJECT_ID-image-renders
+   ```
 
+## 🛠️ Local Development
+
+### Setup
 1. **Install Dependencies**:
    ```bash
+   cd src/imageassistantservice
+   python -m venv env
+   source env/bin/activate
    pip install -r requirements.txt
    ```
 
@@ -118,122 +148,176 @@ The service provides both **gRPC** and **HTTP REST** interfaces:
    ./genproto.sh
    ```
 
-3. **Run the Service**:
+3. **Environment Configuration**:
+   ```bash
+   cp env.example .env
+   # Edit .env with your configuration
+   ```
+
+4. **Run the Service**:
    ```bash
    python server.py
    ```
 
-### Docker Deployment
-
-1. **Build Image**:
-   ```bash
-   docker build -t imageassistant-service .
-   ```
-
-2. **Run Container**:
-   ```bash
-   docker run -p 8080:8080 -p 8000:8000 \
-     -e GOOGLE_CLOUD_PROJECT=your-project \
-     -e GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json \
-     -v /path/to/credentials.json:/path/to/credentials.json \
-     imageassistant-service
-   ```
-
-## API Usage
-
-### HTTP REST API
-
+### Testing
 ```bash
-# Health check
-curl http://localhost:8000/health
+# Test image analysis
+python test_grpc_visualizer.py
 
-# Analyze image
-curl -X POST http://localhost:8000/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"image_url": "https://example.com/image.jpg"}'
-
-# Visualize product
-curl -X POST http://localhost:8000/visualize \
-  -H "Content-Type: application/json" \
-  -d '{
-    "base_image_url": "https://example.com/room.jpg",
-    "product_image_url": "https://example.com/chair.jpg"
-  }'
+# Test Gemini-based product visualization
+python test_gemini_visualizer.py
 ```
 
-### gRPC API
+## 🚢 Deployment
 
-Use the generated client code in `genproto/` directory:
+### Docker Build
+```bash
+# Build image
+docker build -t gcr.io/PROJECT_ID/imageassistantservice:latest .
 
+# Push to registry
+docker push gcr.io/PROJECT_ID/imageassistantservice:latest
+```
+
+### Kubernetes Deployment
+Deploy to GKE using the provided manifests:
+
+```bash
+kubectl apply -f kubernetes-manifests/imageassistantservice.yaml
+```
+
+The service uses **Workload Identity** for secure GCP authentication without managing service account keys.
+
+## 📊 Performance & Capabilities
+
+### Image Analysis Performance
+- **Parallel Processing**: Vision API calls executed concurrently
+- **Response Time**: ~1-3 seconds for comprehensive analysis
+- **Accuracy**: Enhanced by Gemini-powered style intelligence
+
+### Product Visualization Performance
+- **Processing Time**: ~25-30 seconds for photorealistic generation
+- **Quality**: High-resolution output with natural lighting and shadows
+- **Accuracy**: Preserves exact product details while ensuring realistic integration
+
+### Scalability
+- **Async Architecture**: Handles multiple concurrent requests
+- **Kubernetes Ready**: Auto-scaling with resource limits
+- **GCS Integration**: Efficient image storage and delivery
+
+## 🔧 Configuration
+
+### Environment Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOOGLE_CLOUD_PROJECT` | - | GCP Project ID (required) |
+| `GOOGLE_CLOUD_REGION` | `us-central1` | GCP Region for Vertex AI |
+| `GCS_RENDERS_BUCKET` | - | GCS bucket for generated images |
+| `PORT` | `8080` | gRPC server port |
+
+### Service Configuration
+- **Workload Identity**: Automatic GCP authentication in Kubernetes
+- **Resource Limits**: Configured for optimal AI workload performance
+- **Health Checks**: gRPC health check implementation
+
+## 🧪 API Examples
+
+### Image Analysis
 ```python
 import grpc
 from genproto import imageassistant_pb2, imageassistant_pb2_grpc
 
-# Create channel
+# Create gRPC client
 channel = grpc.insecure_channel('localhost:8080')
 stub = imageassistant_pb2_grpc.ImageAssistantServiceStub(channel)
 
 # Analyze image
 request = imageassistant_pb2.AnalyzeImageRequest(
-    image_url="https://example.com/image.jpg"
+    image_url="https://example.com/room.jpg",
+    context="Interior design analysis"
 )
 response = stub.AnalyzeImage(request)
+
+print(f"Scene: {response.scene_type}")
+print(f"Styles: {response.styles}")
+print(f"Objects: {[obj.label for obj in response.objects]}")
 ```
 
-## Configuration
+### Product Visualization
+```python
+# Visualize product placement
+request = imageassistant_pb2.VisualizeProductRequest(
+    base_image_url="https://example.com/living-room.jpg",
+    product_image_url="https://example.com/artwork.jpg",
+    prompt="Place this artwork naturally on the wall"
+)
+response = stub.VisualizeProduct(request)
 
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GOOGLE_CLOUD_PROJECT` | - | GCP Project ID (required) |
-| `GOOGLE_CLOUD_REGION` | `us-central1` | GCP Region for Vertex AI |
-| `PORT` | `8080` | gRPC server port |
-| `HTTP_PORT` | `8000` | HTTP server port |
-| `ENABLE_HTTP` | `true` | Enable HTTP server alongside gRPC |
-
-### Service Modes
-
-- **gRPC Only**: Set `ENABLE_HTTP=false`
-- **Both Protocols**: Set `ENABLE_HTTP=true` (default)
-
-## Testing
-
-Run tests using pytest:
-
-```bash
-# Install test dependencies
-source  ./env/bin/activate
-pip install pytest pytest-asyncio pytest-grpc
-
-# Run tests
-pytest tests/
+print(f"Generated image: {response.render_url}")
+print(f"Processing time: {response.metadata.latency_ms}ms")
 ```
 
-## Performance Considerations
+## 🔒 Security & Best Practices
 
-- **Async Processing**: All operations are asynchronous for better throughput
-- **Parallel Analysis**: Multiple Vision API calls are made in parallel
-- **Image Caching**: Consider implementing image caching for frequently analyzed images
-- **Rate Limiting**: Be aware of Google Cloud API quotas and rate limits
+### Authentication
+- **Workload Identity**: Secure, keyless authentication in Kubernetes
+- **Service Account Permissions**: Principle of least privilege
+- **HTTPS Only**: All external image URLs must use HTTPS
 
-## Error Handling
+### Input Validation
+- **Pydantic Models**: Comprehensive input validation
+- **URL Validation**: Secure image URL handling
+- **Error Handling**: Graceful error responses with proper gRPC status codes
 
-The service provides comprehensive error handling:
+### Container Security
+- **Non-root User**: Container runs as non-privileged user
+- **Minimal Base Image**: Alpine Linux for reduced attack surface
+- **Resource Limits**: Configured CPU and memory constraints
 
-- **HTTP**: Standard HTTP status codes with detailed error messages
-- **gRPC**: Proper gRPC status codes with error details
-- **Logging**: Structured logging for debugging and monitoring
+## 📈 Monitoring & Observability
 
-## Security
+### Health Checks
+- **gRPC Health Check**: Standard gRPC health checking protocol
+- **Kubernetes Probes**: Readiness and liveness probes configured
 
-- **Authentication**: Uses Google Cloud Application Default Credentials
-- **HTTPS**: Ensure all image URLs use HTTPS
-- **Input Validation**: All inputs are validated using Pydantic models
-- **Non-root User**: Docker container runs as non-root user
+### Logging
+- **Structured Logging**: JSON-formatted logs for monitoring
+- **Request Tracing**: Comprehensive request/response logging
+- **Error Tracking**: Detailed error logging with context
 
-## Monitoring
+### Metrics
+- **Processing Time**: Latency metrics for both analysis and visualization
+- **Success Rates**: Request success/failure tracking
+- **Resource Usage**: CPU/memory utilization monitoring
 
-- **Health Checks**: Available on both HTTP (`/health`) and gRPC protocols
-- **Logging**: Structured logs for monitoring and debugging
-- **Metrics**: Consider integrating with Google Cloud Monitoring
+## 🚀 Advanced Features
+
+### Intelligent Scene Analysis
+The service uses Gemini 2.5 Flash to analyze scenes and products for optimal placement:
+
+1. **Lighting Analysis**: Detects and matches lighting conditions
+2. **Surface Detection**: Identifies available placement surfaces
+3. **Perspective Matching**: Ensures proper depth and spatial relationships
+4. **Style Consistency**: Maintains scene aesthetic and mood
+
+### Photorealistic Integration
+Gemini 2.5 Flash Image Preview provides:
+
+- **Exact Product Preservation**: Maintains all original product details
+- **Natural Lighting**: Adapts to scene lighting conditions
+- **Realistic Shadows**: Generates appropriate contact shadows
+- **Seamless Blending**: Natural edge integration without artifacts
+
+## 🤝 Contributing
+
+### Development Setup
+1. Fork the repository
+2. Set up local development environment
+3. Run tests: `pytest tests/`
+4. Submit pull request
+
+### Code Standards
+- **Type Hints**: All functions must include type annotations
+- **Async/Await**: Use async patterns for all I/O operations
+- **Error Handling**: Comprehensive exception handling
+- **Documentation**: Docstrings for all public methods

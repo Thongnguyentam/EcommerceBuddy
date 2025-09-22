@@ -1,0 +1,67 @@
+# Ignore development environment files
+.env
+.env.local
+.env.*.local
+
+# Ignore local service account keys (use Workload Identity in production)
+service-account-key.json
+
+# Ignore virtual environment
+env/
+venv/
+.venv/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ignore test files
+tests/
+test_*.py
+*_test.py
+
+# Ignore documentation
+*.md
+!README.md
+
+# Ignore logs
+*.log
+logs/
+
+# Ignore temporary files
+*.tmp
+*.temp
+.pytest_cache/
+.coverage
+
+# Ignore images directory (test images)
+images/
+
+# Ignore Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/ 

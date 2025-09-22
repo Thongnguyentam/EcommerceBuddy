@@ -301,7 +301,12 @@ async def serve():
     logger.info("✅ Review Service gRPC server started successfully")
     
     # Wait for server termination
-    await server.wait_for_termination()
+    try:
+        await server.wait_for_termination()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
+    finally:
+        await server.stop(grace=5)  # Await this to ensure shutdown is clean
 
 if __name__ == "__main__":
     try:

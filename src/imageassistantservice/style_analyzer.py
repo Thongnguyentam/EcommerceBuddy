@@ -60,10 +60,10 @@ class StyleAnalyzer:
         try:
             loop = asyncio.get_event_loop()
             resp = await loop.run_in_executor(None, _call)
-
+            print("=========== resp ===========", resp)
             # New SDK returns Pydantic objects; .text will be JSON string here
             text = getattr(resp, "text", None) or getattr(resp, "candidates", [{}])[0].content.parts[0].text
-
+            print("=========== text ===========", text)
             # Clean the response - remove markdown code blocks
             cleaned_text = text.strip()
             if cleaned_text.startswith("```json"):
