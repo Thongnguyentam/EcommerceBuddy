@@ -49,6 +49,12 @@ spec:
           value: "gke-hack-471804-image-renders"
         - name: LOG_LEVEL
           value: "INFO"
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/etc/gcp/key.json"
+        volumeMounts:
+        - name: gcp-key
+          mountPath: /etc/gcp
+          readOnly: true
         # Using Workload Identity - no explicit credentials needed
         resources:
           requests:
@@ -72,6 +78,10 @@ spec:
           timeoutSeconds: 5
           failureThreshold: 3
         # No volume mounts needed with Workload Identity
+      volumes:
+      - name: gcp-key
+        secret:
+          secretName: imageassistant-sa-key
 ---
 apiVersion: v1
 kind: Service

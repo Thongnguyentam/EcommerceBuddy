@@ -160,7 +160,7 @@ Product Visualization: Base + Product → Scene Analysis → Gemini 2.5 Flash Im
    ```
 
 ### Testing
-```bash
+   ```bash
 # Test image analysis
 python test_grpc_visualizer.py
 
@@ -171,7 +171,7 @@ python test_gemini_visualizer.py
 ## 🚢 Deployment
 
 ### Docker Build
-```bash
+   ```bash
 # Build image
 docker build -t gcr.io/PROJECT_ID/imageassistantservice:latest .
 

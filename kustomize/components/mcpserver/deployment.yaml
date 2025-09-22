@@ -26,6 +26,14 @@ spec:
           value: "cartservice:7070"
         - name: PRODUCT_SERVICE_HOST
           value: "productcatalogservice:3550"
+        - name: REVIEW_SERVICE_HOST
+          value: "reviewservice:8080"
+        - name: CURRENCY_SERVICE_HOST
+          value: "currencyservice:7000"
+        - name: SHOPPING_ASSISTANT_SERVICE_HOST
+          value: "shoppingassistantservice:80"
+        - name: IMAGE_ASSISTANT_SERVICE_HOST
+          value: "imageassistantservice:8080"
         - name: MCP_SERVER_PORT
           value: "8080"
         - name: LOG_LEVEL

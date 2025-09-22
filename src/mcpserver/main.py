@@ -30,14 +30,16 @@ from tools.product_tools import ProductTools
 from tools.review_tools import ReviewTools
 from tools.currency_tools import CurrencyTools
 from tools.shopping_assistant_tools import ShoppingAssistantTools
+from tools.image_assistant_tools import ImageAssistantTools
 from clients.cart_client import CartServiceClient
 from clients.product_client import ProductCatalogServiceClient
 from clients.review_client import ReviewServiceClient
 from clients.currency_client import CurrencyServiceClient
 from clients.shopping_assistant_client import ShoppingAssistantServiceClient
+from clients.image_assistant_client import ImageAssistantServiceClient
 
 # Import routers
-from routers import cart_router, product_catalog_router, review_router, currency_router, shopping_assistant_router
+from routers import cart_router, product_catalog_router, review_router, currency_router, shopping_assistant_router, image_assistant_router
 
 
 # Configure logging
@@ -50,17 +52,19 @@ product_client: ProductCatalogServiceClient = None
 review_client: ReviewServiceClient = None
 currency_client: CurrencyServiceClient = None
 shopping_assistant_client: ShoppingAssistantServiceClient = None
+image_assistant_client: ImageAssistantServiceClient = None
 cart_tools: CartTools = None
 product_tools: ProductTools = None
 review_tools: ReviewTools = None
 currency_tools: CurrencyTools = None
 shopping_assistant_tools: ShoppingAssistantTools = None
+image_assistant_tools: ImageAssistantTools = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - startup and shutdown."""
-    global cart_client, product_client, review_client, currency_client, shopping_assistant_client, cart_tools, product_tools, review_tools, currency_tools, shopping_assistant_tools
+    global cart_client, product_client, review_client, currency_client, shopping_assistant_client, image_assistant_client, cart_tools, product_tools, review_tools, currency_tools, shopping_assistant_tools, image_assistant_tools
     
     # Startup
     logger.info("🚀 Starting MCP Server...")
@@ -71,12 +75,14 @@ async def lifespan(app: FastAPI):
     review_host = os.getenv("REVIEW_SERVICE_HOST", "reviewservice:8080")
     currency_host = os.getenv("CURRENCY_SERVICE_HOST", "currencyservice:7000")
     shopping_assistant_host = os.getenv("SHOPPING_ASSISTANT_SERVICE_HOST", "shoppingassistantservice:80")
+    image_assistant_host = os.getenv("IMAGE_ASSISTANT_SERVICE_HOST", "imageassistantservice:8080")
     
     cart_client = CartServiceClient(host=cart_host)
     product_client = ProductCatalogServiceClient(host=product_host)
     review_client = ReviewServiceClient(host=review_host)
     currency_client = CurrencyServiceClient(address=currency_host)
     shopping_assistant_client = ShoppingAssistantServiceClient(address=shopping_assistant_host)
+    image_assistant_client = ImageAssistantServiceClient(address=image_assistant_host)
     
     # Initialize tools
     cart_tools = CartTools(client=cart_client)
@@ -84,6 +90,7 @@ async def lifespan(app: FastAPI):
     review_tools = ReviewTools(client=review_client)
     currency_tools = CurrencyTools(client=currency_client)
     shopping_assistant_tools = ShoppingAssistantTools(client=shopping_assistant_client)
+    image_assistant_tools = ImageAssistantTools(client=image_assistant_client)
     
     # Set tools in routers
     cart_router.set_cart_tools(cart_tools)
@@ -91,12 +98,14 @@ async def lifespan(app: FastAPI):
     review_router.set_review_tools(review_tools)
     currency_router.set_currency_tools(currency_tools)
     shopping_assistant_router.set_shopping_assistant_tools(shopping_assistant_tools)
+    image_assistant_router.set_image_assistant_tools(image_assistant_tools)
     
     logger.info(f"✅ Connected to cartservice at {cart_host}")
     logger.info(f"✅ Connected to productcatalogservice at {product_host}")
     logger.info(f"✅ Connected to reviewservice at {review_host}")
     logger.info(f"✅ Connected to currencyservice at {currency_host}")
     logger.info(f"✅ Connected to shoppingassistantservice at {shopping_assistant_host}")
+    logger.info(f"✅ Connected to imageassistantservice at {image_assistant_host}")
     
     yield
     
@@ -112,6 +121,8 @@ async def lifespan(app: FastAPI):
         currency_client.close()
     if shopping_assistant_client:
         shopping_assistant_client.close()
+    if image_assistant_client:
+        image_assistant_client.close()
 
 
 # Create FastAPI app
@@ -137,6 +148,7 @@ app.include_router(product_catalog_router.router)
 app.include_router(review_router.router)
 app.include_router(currency_router.router)
 app.include_router(shopping_assistant_router.router)
+app.include_router(image_assistant_router.router)
 
 
 # Health check endpoint
@@ -353,6 +365,25 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "room_context": {"type": "string", "description": "Optional context about the room", "required": False}
                 },
                 "endpoint": "/shopping-assistant/complementary-products"
+            },
+            {
+                "name": "analyze_image",
+                "description": "Analyze an image for objects, scene type, styles, and colors using AI",
+                "parameters": {
+                    "image_url": {"type": "string", "description": "URL of the image to analyze"},
+                    "context": {"type": "string", "description": "Optional context for better analysis", "required": False}
+                },
+                "endpoint": "/image-assistant/tools/analyze-image"
+            },
+            {
+                "name": "visualize_product",
+                "description": "Visualize a product in a user photo using AI-powered image generation (Nano Banana)",
+                "parameters": {
+                    "base_image_url": {"type": "string", "description": "URL of the base scene/room image"},
+                    "product_image_url": {"type": "string", "description": "URL of the product image"},
+                    "prompt": {"type": "string", "description": "Description of how to place the product (e.g., 'Place this vase on the table')"}
+                },
+                "endpoint": "/image-assistant/tools/visualize-product"
             }
         ]
     }
