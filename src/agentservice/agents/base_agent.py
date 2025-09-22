@@ -77,6 +77,7 @@ class BaseAgent(ABC):
             # Make the API call
             url = f"{self.mcp_base_url}{tool_endpoint}"
             logger.info(f"{self.name} calling tool: {tool_name} -> {method} {url}")
+            logger.info(f"{self.name} tool parameters: {parameters}")
             
             # Use appropriate HTTP method
             if method == 'GET':
@@ -139,6 +140,36 @@ class BaseAgent(ABC):
             {'role': 'user', 'content': user_message},
             {'role': 'assistant', 'content': agent_response, 'tools_used': tools_used}
         ])
+    
+    def extract_urls_from_text(self, text: str) -> List[str]:
+        """Extract URLs from text using regex, including cloud storage URLs."""
+        import re
+        
+        # Enhanced URL patterns to include cloud storage
+        url_patterns = [
+            # Standard HTTP/HTTPS URLs
+            r'https?://[^\s<>"{}|\\^`\[\]]+(?:\.[^\s<>"{}|\\^`\[\]]+)*',
+            # Google Cloud Storage URLs
+            r'gs://[^\s<>"{}|\\^`\[\]]+',
+            # Google Cloud Storage HTTP URLs
+            r'https://storage\.googleapis\.com/[^\s<>"{}|\\^`\[\]]+',
+            r'https://storage\.cloud\.google\.com/[^\s<>"{}|\\^`\[\]]+',
+            # Firebase Storage URLs
+            r'https://firebasestorage\.googleapis\.com/[^\s<>"{}|\\^`\[\]]+',
+            # AWS S3 URLs
+            r'https://[^.\s]+\.s3\.amazonaws\.com/[^\s<>"{}|\\^`\[\]]+',
+            r's3://[^\s<>"{}|\\^`\[\]]+',
+            # Azure Blob Storage URLs
+            r'https://[^.\s]+\.blob\.core\.windows\.net/[^\s<>"{}|\\^`\[\]]+',
+        ]
+        
+        urls = []
+        for pattern in url_patterns:
+            found_urls = re.findall(pattern, text, re.IGNORECASE)
+            urls.extend(found_urls)
+        
+        # Remove duplicates while preserving order
+        return list(dict.fromkeys(urls))
     
     def create_tool_calling_prompt(self, user_message: str, available_tools: List[Dict[str, Any]]) -> str:
         """Create a prompt for tool selection and parameter extraction."""

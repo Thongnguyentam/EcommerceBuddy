@@ -46,9 +46,16 @@ class ProductAgent(BaseAgent):
             session_id = str(uuid.uuid4())
         
         try:
+            # Debug logging
+            logger.info(f"ProductAgent processing: '{message}' (user_id: {user_id}, session_id: {session_id})")
+            logger.info(f"ProductAgent context: {context}")
+            
             # Analyze request and determine tools to use
             available_tools = self.get_available_tools()
+            logger.info(f"ProductAgent available tools: {[t['name'] for t in available_tools]}")
+            
             tool_plan = await self._plan_tool_usage(message, available_tools)
+            logger.info(f"ProductAgent tool plan: {tool_plan}")
             
             # Execute tools
             results = []

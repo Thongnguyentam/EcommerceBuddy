@@ -162,10 +162,16 @@ Domain agents available:
         for step in workflow_steps:
             try:
                 # Check if this step should be delegated to a domain agent
-                if step.get('agent_delegation', False):
+                domain = step.get('domain')
+                should_delegate = step.get('agent_delegation', True)  # Default to True
+                
+                # Only delegate if we have the domain agent available
+                if should_delegate and domain in self._get_domain_agents():
+                    logger.info(f"Delegating step {step.get('step')} to {domain} agent")
                     step_result = await self._delegate_to_domain_agent(step, original_message, user_id, session_id)
                 else:
-                    # Fallback to direct tool execution for backward compatibility
+                    # Fallback to direct tool execution
+                    logger.info(f"Executing step {step.get('step')} directly (no delegation)")
                     step_result = await self._execute_step(step, original_message, user_id, session_id)
                 
                 step_results.append(step_result)
@@ -206,15 +212,31 @@ Domain agents available:
             # Get the domain agent
             agent = domain_agents[domain]
             
-            logger.info(f"Delegating to {domain} agent: {action}")
+            logger.info(f"Delegating to {domain} agent: {action} (user_id: {user_id or 'anonymous'})")
+            
+            # Prepare context with user information and orchestrator metadata
+            delegation_context = {
+                "orchestrator_action": action, 
+                "step": step,
+                "user_id": user_id,  # Explicitly pass user_id in context
+                "session_id": session_id,
+                "delegation_source": "orchestrator"
+            }
+            
+            # Debug logging
+            logger.info(f"Calling {domain} agent with message: '{original_message[:100]}...' user_id: {user_id}")
             
             # Delegate the request to the domain agent
             agent_result = await agent.process_request(
                 message=original_message,
-                user_id=user_id,
+                user_id=user_id,  # Pass user_id directly
                 session_id=session_id,
-                context={"orchestrator_action": action, "step": step}
+                context=delegation_context  # Enhanced context
             )
+            
+            # Debug the agent result
+            logger.info(f"{domain} agent returned: tools_called={agent_result.get('tools_called', [])} response_length={len(agent_result.get('response', ''))}")
+            logger.info(f"{domain} agent full result keys: {list(agent_result.keys())}")
             
             # Convert agent result to step result format
             step_result = {
@@ -294,7 +316,11 @@ Domain agents available:
         if not tool_schema:
             return {}
         
-        # Use Gemini to extract parameters
+        # Special handling for image tools - extract URLs directly
+        if tool_name in ['analyze_image', 'visualize_product']:
+            return self._extract_image_tool_parameters(tool_name, message, tool_schema)
+        
+        # Use Gemini to extract parameters for other tools
         param_prompt = f"""Extract parameters for the tool '{tool_name}' from this user message.
 
 User message: {message}
@@ -302,6 +328,12 @@ User ID: {user_id or "unknown"}
 
 Tool schema:
 {json.dumps(tool_schema, indent=2)}
+
+Important guidelines:
+- Extract exact URLs without modification
+- For image tools, look for HTTP/HTTPS URLs in the message
+- For product searches, extract product names, categories, or search terms
+- For cart operations, extract product IDs and quantities
 
 Respond with only a JSON object containing the parameters:"""
 
@@ -326,6 +358,72 @@ Respond with only a JSON object containing the parameters:"""
                 fallback_params['query'] = message
                 
             return fallback_params
+    
+    def _extract_image_tool_parameters(self, tool_name: str, message: str, tool_schema: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract parameters specifically for image tools using regex, including GCS URLs."""
+        import re
+        
+        # Extract URLs from message - enhanced to include cloud storage URLs
+        url_patterns = [
+            # Standard HTTP/HTTPS URLs
+            r'https?://[^\s<>"{}|\\^`\[\]]+(?:\.[^\s<>"{}|\\^`\[\]]+)*',
+            # Google Cloud Storage URLs
+            r'gs://[^\s<>"{}|\\^`\[\]]+',
+            # Google Cloud Storage HTTP URLs
+            r'https://storage\.googleapis\.com/[^\s<>"{}|\\^`\[\]]+',
+            r'https://storage\.cloud\.google\.com/[^\s<>"{}|\\^`\[\]]+',
+            # Firebase Storage URLs
+            r'https://firebasestorage\.googleapis\.com/[^\s<>"{}|\\^`\[\]]+',
+            # AWS S3 URLs
+            r'https://[^.\s]+\.s3\.amazonaws\.com/[^\s<>"{}|\\^`\[\]]+',
+            r's3://[^\s<>"{}|\\^`\[\]]+',
+            # Azure Blob Storage URLs
+            r'https://[^.\s]+\.blob\.core\.windows\.net/[^\s<>"{}|\\^`\[\]]+',
+        ]
+        
+        urls = []
+        for pattern in url_patterns:
+            found_urls = re.findall(pattern, message, re.IGNORECASE)
+            urls.extend(found_urls)
+        
+        # Remove duplicates while preserving order
+        urls = list(dict.fromkeys(urls))
+        
+        parameters = {}
+        schema_params = tool_schema.get('parameters', {})
+        
+        if tool_name == 'analyze_image':
+            if 'image_url' in schema_params and urls:
+                parameters['image_url'] = urls[0]
+            if 'context' in schema_params:
+                parameters['context'] = message[:200]  # First 200 chars as context
+                
+        elif tool_name == 'visualize_product':
+            if len(urls) >= 2:
+                if 'base_image_url' in schema_params:
+                    parameters['base_image_url'] = urls[0]
+                if 'product_image_url' in schema_params:
+                    parameters['product_image_url'] = urls[1]
+            elif len(urls) == 1:
+                # Try to determine which URL type based on context
+                message_lower = message.lower()
+                if any(keyword in message_lower for keyword in ['room', 'space', 'background', 'scene', 'environment']):
+                    if 'base_image_url' in schema_params:
+                        parameters['base_image_url'] = urls[0]
+                elif any(keyword in message_lower for keyword in ['product', 'item', 'furniture', 'object', 'thing']):
+                    if 'product_image_url' in schema_params:
+                        parameters['product_image_url'] = urls[0]
+                else:
+                    # Default to base image if unclear
+                    if 'base_image_url' in schema_params:
+                        parameters['base_image_url'] = urls[0]
+            
+            if 'prompt' in schema_params:
+                parameters['prompt'] = f"Visualize this product in the space: {message[:100]}"
+        
+        logger.info(f"Extracted image tool parameters for {tool_name}: {list(parameters.keys())}")
+        logger.debug(f"URLs found for {tool_name}: {urls[:2]}...")  # Log first 2 URLs for debugging
+        return parameters
     
     async def _synthesize_response(self, analysis: Dict[str, Any], step_results: List[Dict[str, Any]], 
                                   original_message: str) -> str:
@@ -363,7 +461,7 @@ Response:"""
                        "get_products_by_category", "semantic_search_products"],
             "cart": ["add_to_cart", "get_cart_contents", "clear_cart"],
             "currency": ["get_supported_currencies", "convert_currency", "get_exchange_rates", "format_money"],
-            "reviews": ["create_review", "get_product_reviews", "get_user_reviews", 
+            "sentiment": ["create_review", "get_product_reviews", "get_user_reviews", 
                        "update_review", "delete_review", "get_product_review_summary"],
             # "shopping_assistant": ["get_ai_recommendations", "get_style_based_recommendations", 
             #                       "get_room_specific_recommendations", "analyze_room_image", 

@@ -39,9 +39,9 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-    context: Optional[Dict[str, Any]] = None
+    user_id: str  # Required: User identifier from frontend session
+    session_id: str  # Required: Chat session identifier (same as user_id in this system)
+    context: Optional[Dict[str, Any]] = None  # Additional context (preferences, etc.)
 
 class ChatResponse(BaseModel):
     response: str
@@ -72,83 +72,92 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting Agent Service...")
     
-    # Initialize configuration
-    environment = os.getenv("ENVIRONMENT", "production")
-    
-    # Set MCP URL based on environment
-    if environment == "development":
-        mcp_base_url = os.getenv("MCP_BASE_URL", "http://localhost:8081")
-    else:
-        mcp_base_url = os.getenv("MCP_BASE_URL", "http://mcpserver:8080")
-    
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    location = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
-    
-    logger.info(f"🌍 Environment: {environment}")
-    logger.info(f"🔗 MCP Base URL: {mcp_base_url}")
-    
-    if not project_id:
-        raise ValueError("GOOGLE_CLOUD_PROJECT environment variable is required")
-    
-    # Initialize Vertex AI and Gemini
     try:
-        vertexai.init(project=project_id, location=location)
-        gemini_client = genai.Client(vertexai=True, project=project_id, location=location)
-        logger.info(f"✅ Initialized Gemini client for project: {project_id}")
+        # Initialize configuration
+        environment = os.getenv("ENVIRONMENT", "production")
+        
+        # Set MCP URL based on environment
+        if environment == "development":
+            mcp_base_url = os.getenv("MCP_BASE_URL", "http://localhost:8081")
+        else:
+            mcp_base_url = os.getenv("MCP_BASE_URL", "http://mcpserver:8080")
+        
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
+        
+        logger.info(f"🌍 Environment: {environment}")
+        logger.info(f"🔗 MCP Base URL: {mcp_base_url}")
+        
+        if not project_id:
+            raise ValueError("GOOGLE_CLOUD_PROJECT environment variable is required")
+        
+        # Initialize Vertex AI and Gemini
+        try:
+            vertexai.init(project=project_id, location=location)
+            gemini_client = genai.Client(vertexai=True, project=project_id, location=location)
+            logger.info(f"✅ Initialized Gemini client for project: {project_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Vertex AI: {str(e)}")
+            raise
+        
+        # Initialize HTTP client
+        http_client = httpx.AsyncClient(timeout=60.0)
+        
+        # Discover tools from MCP server
+        try:
+            await discover_tools()
+            logger.info(f"✅ Discovered {len(tools_schema.get('tools', []))} tools from MCP server")
+        except Exception as e:
+            logger.error(f"❌ Failed to discover tools from MCP: {str(e)}")
+            raise
+        
+        # Initialize agents
+        from agents.orchestrator import OrchestratorAgent
+        from agents.product_agent import ProductAgent
+        from agents.image_agent import ImageAgent
+        from agents.cart_agent import CartAgent
+        from agents.currency_agent import CurrencyAgent
+        from agents.sentiment_agent import SentimentAgent
+        # from agents.shopping_assistant_agent import ShoppingAssistantAgent
+        
+        # Initialize domain agents first
+        domain_agents = {
+            "product": ProductAgent(gemini_client, http_client, mcp_base_url, tools_schema),
+            "image": ImageAgent(gemini_client, http_client, mcp_base_url, tools_schema),
+            "cart": CartAgent(gemini_client, http_client, mcp_base_url, tools_schema),
+            "currency": CurrencyAgent(gemini_client, http_client, mcp_base_url, tools_schema),
+            "sentiment": SentimentAgent(gemini_client, http_client, mcp_base_url, tools_schema),
+            # "shopping_assistant": ShoppingAssistantAgent(gemini_client, http_client, mcp_base_url, tools_schema)
+        }
+        
+        # Initialize orchestrator and provide it access to domain agents
+        orchestrator_agent = OrchestratorAgent(
+            gemini_client=gemini_client,
+            http_client=http_client,
+            mcp_base_url=mcp_base_url,
+            tools_schema=tools_schema
+        )
+        
+        # Set domain agents on orchestrator for delegation
+        orchestrator_agent._domain_agents = domain_agents
+        
+        logger.info(f"✅ Initialized orchestrator and {len(domain_agents)} domain agents")
+        logger.info(f"✅ Agent Service ready - connected to MCP at {mcp_base_url}")
+        
     except Exception as e:
-        logger.error(f"❌ Failed to initialize Vertex AI: {str(e)}")
+        logger.error(f"❌ Startup failed: {str(e)}")
         raise
     
-    # Initialize HTTP client
-    http_client = httpx.AsyncClient(timeout=60.0)
-    
-    # Discover tools from MCP server
-    try:
-        await discover_tools()
-        logger.info(f"✅ Discovered {len(tools_schema.get('tools', []))} tools from MCP server")
-    except Exception as e:
-        logger.error(f"❌ Failed to discover tools from MCP: {str(e)}")
-        raise
-    
-    # Initialize agents
-    from agents.orchestrator import OrchestratorAgent
-    from agents.product_agent import ProductAgent
-    from agents.image_agent import ImageAgent
-    from agents.cart_agent import CartAgent
-    from agents.currency_agent import CurrencyAgent
-    from agents.sentiment_agent import SentimentAgent
-    from agents.shopping_assistant_agent import ShoppingAssistantAgent
-    
-    # Initialize domain agents first
-    domain_agents = {
-        "product": ProductAgent(gemini_client, http_client, mcp_base_url, tools_schema),
-        "image": ImageAgent(gemini_client, http_client, mcp_base_url, tools_schema),
-        "cart": CartAgent(gemini_client, http_client, mcp_base_url, tools_schema),
-        "currency": CurrencyAgent(gemini_client, http_client, mcp_base_url, tools_schema),
-        "sentiment": SentimentAgent(gemini_client, http_client, mcp_base_url, tools_schema),
-        # "shopping_assistant": ShoppingAssistantAgent(gemini_client, http_client, mcp_base_url, tools_schema)
-    }
-    
-    # Initialize orchestrator and provide it access to domain agents
-    orchestrator_agent = OrchestratorAgent(
-        gemini_client=gemini_client,
-        http_client=http_client,
-        mcp_base_url=mcp_base_url,
-        tools_schema=tools_schema
-    )
-    
-    # Set domain agents on orchestrator for delegation
-    orchestrator_agent._domain_agents = domain_agents
-    
-    logger.info(f"✅ Initialized orchestrator and {len(domain_agents)} domain agents")
-    logger.info(f"✅ Agent Service ready - connected to MCP at {mcp_base_url}")
-    
-    yield
+    yield  # Application runs here
     
     # Shutdown
     logger.info("🛑 Shutting down Agent Service...")
-    if http_client:
-        await http_client.aclose()
+    try:
+        if http_client:
+            await http_client.aclose()
+            logger.info("✅ HTTP client closed")
+    except Exception as e:
+        logger.error(f"❌ Shutdown error: {str(e)}")
 
 async def discover_tools():
     """Discover available tools from MCP server."""
@@ -204,10 +213,13 @@ async def chat(request: ChatRequest):
     try:
         start_time = datetime.now()
         
+        # Log user context for debugging
+        logger.info(f"Chat request from user: {request.user_id or 'anonymous'}, session: {request.session_id or 'new'}")
+        
         # Use orchestrator to handle the request
         result = await orchestrator_agent.process_request(
             message=request.message,
-            user_id=request.user_id,
+            user_id=request.user_id,  # Flows from frontend authentication
             session_id=request.session_id,
             context=request.context
         )

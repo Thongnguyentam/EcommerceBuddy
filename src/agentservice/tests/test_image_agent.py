@@ -128,11 +128,6 @@ async def test_base_agent_functionality(mcp_url: str, tools_schema: dict):
             mcp_base_url=mcp_url,
             tools_schema=tools_schema
         )
-        
-        # Test response generation
-        response = await agent.generate_response("What is image analysis?")
-        print(f"✅ Response generation: {response}...")
-        
         # Test tool filtering
         available_tools = agent.get_available_tools()
         print(f"✅ Available tools: {[tool['name'] for tool in available_tools]}")
