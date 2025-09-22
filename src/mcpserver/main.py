@@ -176,7 +176,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "product_id": {"type": "string", "description": "Product ID to add"},
                     "quantity": {"type": "integer", "description": "Quantity to add"}
                 },
-                "endpoint": "/tools/cart/add"
+                "endpoint": "/tools/cart/add",
+                "method": "POST"
             },
             {
                 "name": "get_cart_contents",
@@ -184,7 +185,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                 "parameters": {
                     "user_id": {"type": "string", "description": "User identifier"}
                 },
-                "endpoint": "/tools/cart/get"
+                "endpoint": "/tools/cart/get",
+                "method": "POST"
             },
             {
                 "name": "clear_cart",
@@ -192,13 +194,15 @@ async def get_tools_schema() -> Dict[str, Any]:
                 "parameters": {
                     "user_id": {"type": "string", "description": "User identifier"}
                 },
-                "endpoint": "/tools/cart/clear"
+                "endpoint": "/tools/cart/clear",
+                "method": "POST"
             },
             {
                 "name": "list_all_products",
                 "description": "Get all products from the catalog",
                 "parameters": {},
-                "endpoint": "/tools/products/list"
+                "endpoint": "/tools/products/list",
+                "method": "GET"
             },
             {
                 "name": "get_product_by_id",
@@ -206,7 +210,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                 "parameters": {
                     "product_id": {"type": "string", "description": "Product ID to retrieve"}
                 },
-                "endpoint": "/tools/products/get"
+                "endpoint": "/tools/products/get",
+                "method": "POST"
             },
             {
                 "name": "search_products",
@@ -214,7 +219,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                 "parameters": {
                     "query": {"type": "string", "description": "Search query"}
                 },
-                "endpoint": "/tools/products/search"
+                "endpoint": "/tools/products/search",
+                "method": "POST"
             },
             {
                 "name": "get_products_by_category",
@@ -222,7 +228,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                 "parameters": {
                     "category": {"type": "string", "description": "Category to filter by"}
                 },
-                "endpoint": "/tools/products/category"
+                "endpoint": "/tools/products/category",
+                "method": "POST"
             },
             {
                 "name": "semantic_search_products",
@@ -231,7 +238,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "query": {"type": "string", "description": "Natural language search query"},
                     "limit": {"type": "integer", "description": "Maximum number of results (default: 10, max: 50)", "required": False}
                 },
-                "endpoint": "/tools/products/semantic-search"
+                "endpoint": "/tools/products/semantic-search",
+                "method": "POST"
             },
             {
                 "name": "create_review",
@@ -242,7 +250,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "rating": {"type": "integer", "description": "Rating from 1-5 stars"},
                     "review_text": {"type": "string", "description": "Review text/comment", "required": False}
                 },
-                "endpoint": "/tools/reviews/create"
+                "endpoint": "/tools/reviews/create",
+                "method": "POST"
             },
             {
                 "name": "get_product_reviews",
@@ -252,7 +261,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "limit": {"type": "integer", "description": "Maximum reviews to return", "required": False},
                     "offset": {"type": "integer", "description": "Number of reviews to skip", "required": False}
                 },
-                "endpoint": "/tools/reviews/product"
+                "endpoint": "/tools/reviews/product",
+                "method": "POST"
             },
             {
                 "name": "get_user_reviews",
@@ -262,7 +272,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "limit": {"type": "integer", "description": "Maximum reviews to return", "required": False},
                     "offset": {"type": "integer", "description": "Number of reviews to skip", "required": False}
                 },
-                "endpoint": "/tools/reviews/user"
+                "endpoint": "/tools/reviews/user",
+                "method": "POST"
             },
             {
                 "name": "update_review",
@@ -272,7 +283,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "rating": {"type": "integer", "description": "New rating from 1-5 stars"},
                     "review_text": {"type": "string", "description": "New review text", "required": False}
                 },
-                "endpoint": "/tools/reviews/update"
+                "endpoint": "/tools/reviews/update",
+                "method": "POST"
             },
             {
                 "name": "delete_review",
@@ -280,7 +292,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                 "parameters": {
                     "review_id": {"type": "integer", "description": "Review ID to delete"}
                 },
-                "endpoint": "/tools/reviews/delete"
+                "endpoint": "/tools/reviews/delete",
+                "method": "POST"
             },
             {
                 "name": "get_product_review_summary",
@@ -288,13 +301,15 @@ async def get_tools_schema() -> Dict[str, Any]:
                 "parameters": {
                     "product_id": {"type": "string", "description": "Product ID"}
                 },
-                "endpoint": "/tools/reviews/summary"
+                "endpoint": "/tools/reviews/summary",
+                "method": "POST"
             },
             {
                 "name": "get_supported_currencies",
                 "description": "Get list of all supported currency codes",
                 "parameters": {},
-                "endpoint": "/currency/supported-currencies"
+                "endpoint": "/currency/supported-currencies",
+                "method": "GET"
             },
             {
                 "name": "convert_currency",
@@ -304,13 +319,15 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "to_currency": {"type": "string", "description": "Target currency code (e.g., 'EUR')"},
                     "amount": {"type": "number", "description": "Amount to convert as decimal"}
                 },
-                "endpoint": "/currency/convert"
+                "endpoint": "/currency/convert",
+                "method": "POST"
             },
             {
                 "name": "get_exchange_rates",
                 "description": "Get current exchange rates for all supported currencies",
                 "parameters": {},
-                "endpoint": "/currency/exchange-rates"
+                "endpoint": "/currency/exchange-rates",
+                "method": "GET"
             },
             {
                 "name": "format_money",
@@ -319,7 +336,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "amount": {"type": "number", "description": "Amount to format"},
                     "currency_code": {"type": "string", "description": "Currency code (e.g., 'USD')"}
                 },
-                "endpoint": "/currency/format-money"
+                "endpoint": "/currency/format-money",
+                "method": "POST"
             },
             {
                 "name": "get_ai_recommendations",
@@ -373,7 +391,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "image_url": {"type": "string", "description": "URL of the image to analyze"},
                     "context": {"type": "string", "description": "Optional context for better analysis", "required": False}
                 },
-                "endpoint": "/image-assistant/tools/analyze-image"
+                "endpoint": "/image-assistant/tools/analyze-image",
+                "method": "POST"
             },
             {
                 "name": "visualize_product",
@@ -383,7 +402,8 @@ async def get_tools_schema() -> Dict[str, Any]:
                     "product_image_url": {"type": "string", "description": "URL of the product image"},
                     "prompt": {"type": "string", "description": "Description of how to place the product (e.g., 'Place this vase on the table')"}
                 },
-                "endpoint": "/image-assistant/tools/visualize-product"
+                "endpoint": "/image-assistant/tools/visualize-product",
+                "method": "POST"
             }
         ]
     }

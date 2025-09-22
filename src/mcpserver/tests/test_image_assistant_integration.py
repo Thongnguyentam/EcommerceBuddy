@@ -210,7 +210,7 @@ if __name__ == "__main__":
     # Give user a chance to cancel if port-forward isn't ready
     try:
         time.sleep(2)
-        asyncio.run(main())
+    asyncio.run(main()) 
     except KeyboardInterrupt:
         print("\n⏹️  Test cancelled by user")
         sys.exit(0)
