@@ -53,7 +53,7 @@ The application now includes an **intelligent agent orchestration system** that 
 | [**agentservice**](/src/agentservice)               | Python        | **Gemini 2.5 Flash**, Vertex AI | **Orchestrator + Domain Agents**: Coordinates intelligent shopping workflows across specialized AI agents for natural language shopping assistance. |
 | [**mcpserver**](/src/mcpserver)                     | Python        | FastAPI, Cloud Run | **Tool Discovery Hub**: Centralized Model Context Protocol server that exposes all microservice operations as discoverable AI tools. |
 | [**imageassistantservice**](/src/imageassistantservice) | Python    | **Gemini 2.5 Flash Image**, Vision API, Cloud Storage | **"Nano Banana" Visualizer**: Advanced image analysis and AI-powered product visualization using Gemini 2.5 Flash Image Preview. |
-| [**reviewservice**](/src/reviewservice)             | Python        | **Cloud SQL**, AlloyDB | **Review Intelligence**: gRPC service for product reviews with sentiment analysis and review aggregation. |
+| [**reviewservice**](/src/reviewservice)             | Python        | **Cloud SQL** | **Review Intelligence**: gRPC service for product reviews with sentiment analysis and review aggregation. |
 | [**embeddingservice**](/src/embeddingservice)       | Python        | **Vertex AI Embeddings** | **Semantic Understanding**: Generates text embeddings using Vertex AI's text-embedding-004 model for semantic search. |
 | [**embeddingworker**](/src/embeddingworker)         | Python        | **Cloud SQL**, PostgreSQL LISTEN/NOTIFY | **Real-time RAG**: Event-driven worker that automatically generates embeddings when product data changes. |
 

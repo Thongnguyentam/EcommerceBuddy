@@ -47,6 +47,282 @@
         </div>
     </div>
 </footer>
+
+<!-- Floating Chatbot Icon -->
+<button class="chatbot-float" onclick="openChatbot()" title="Chat with EcommerceBuddy AI">
+    <img src="{{ $.baseUrl }}/static/icons/EcommerceBuddy.png" alt="EcommerceBuddy AI" style="width: 40px; height: 40px; border-radius: 50%;">
+</button>
+
+<!-- Chatbot Modal Overlay -->
+<div id="chatbot-modal-overlay" class="chatbot-modal-overlay" onclick="closeChatbot(event)">
+    <div class="chatbot-modal-container" onclick="event.stopPropagation()">
+        <div class="chatbot-modal-header">
+            <h3>🤖 EcommerceBuddy AI</h3>
+            <button class="chatbot-close-btn" onclick="closeChatbot()">&times;</button>
+        </div>
+        <div class="chatbot-modal-body">
+            <div id="chat-modal-embedded" class="chat-modal-embedded">
+                <div id="bot-messages-embedded" class="bot-messages-embedded">
+                    <div class="bot-message">
+                        <div class="bot-message-text bot-message-markdown">
+                            <p>👋 Hi! I'm <strong>EcommerceBuddy</strong>, your AI shopping assistant powered by <em>Gemini 2.5 Flash</em>.</p>
+                        </div>
+                    </div>
+                    <div class="bot-message">
+                        <div class="bot-message-text bot-message-markdown">
+                            <p>I can help you:</p>
+                            <ul>
+                                <li><strong>Find products</strong> using natural language</li>
+                                <li><strong>Analyze images</strong> with "Nano Banana" visualization</li>
+                                <li><strong>Manage your cart</strong> and checkout</li>
+                                <li><strong>Answer questions</strong> about our store</li>
+                            </ul>
+                            <p>What can I help you with today? 🛍️</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bot-input-embedded">
+                    <input id="bot-input-text-embedded" type="text" class="bot-input-text-embedded" placeholder="Ask me anything about products...">
+                    <input type="file" id="bot-input-file-embedded" style="display: none;" accept="image/*" onchange="getBase64Embedded()">
+                    <button onclick="document.getElementById('bot-input-file-embedded').click()" class="bot-input-button-embedded" style="background: #6c757d; padding: 8px 12px;" title="Upload image">📷</button>
+                    <button id="bot-input-button-embedded" class="bot-input-button-embedded">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Chatbot Modal Functions
+function openChatbot() {
+    document.getElementById('chatbot-modal-overlay').classList.add('active');
+    document.getElementById('bot-input-text-embedded').focus();
+}
+
+function closeChatbot(event) {
+    if (!event || event.target.id === 'chatbot-modal-overlay' || event.target.classList.contains('chatbot-close-btn')) {
+        document.getElementById('chatbot-modal-overlay').classList.remove('active');
+    }
+}
+
+// Enhanced Chatbot Functionality
+let imageEmbedded;
+let sessionId = '{{ $.session_id }}' || 'session_' + Date.now();
+let userId = sessionId; // Use session ID as user ID
+
+function getBase64Embedded() {
+    const file = document.getElementById('bot-input-file-embedded').files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onloadend = function() {
+        imageEmbedded = reader.result;
+        // Show image preview
+        const botMessages = document.getElementById('bot-messages-embedded');
+        const imagePreview = document.createElement('div');
+        imagePreview.className = 'user-message';
+        imagePreview.innerHTML = `
+            <div class="user-image-div">
+                <img src="${imageEmbedded}" class="user-image" style="max-width: 200px; max-height: 150px; border-radius: 8px;">
+            </div>
+        `;
+        botMessages.appendChild(imagePreview);
+        botMessages.scrollTop = botMessages.scrollHeight;
+    };
+    reader.readAsDataURL(file);
+}
+
+function extractIdsFromStringEmbedded(message) {
+    const idPattern = /\[([a-zA-Z0-9-]+)\]/g;
+    const matches = message.matchAll(idPattern);
+    const ids = [];
+    for (const match of matches) {
+        ids.push(match[1]);
+    }
+    return ids;
+}
+
+async function handleEmbeddedButtonClick() {
+    const botInput = document.getElementById('bot-input-text-embedded');
+    const botButton = document.getElementById('bot-input-button-embedded');
+    const botMessages = document.getElementById('bot-messages-embedded');
+    
+    if (!botInput.value || !botInput.value.trim()) {
+        return;
+    }
+
+    const message = botInput.value.trim();
+    
+    // Add user message
+    const userMessage = document.createElement('div');
+    userMessage.className = 'user-message';
+    userMessage.innerHTML = `<span class="user-message-text">${message}</span>`;
+    botMessages.appendChild(userMessage);
+    botMessages.scrollTop = botMessages.scrollHeight;
+    
+    botInput.value = '';
+    botButton.disabled = true;
+    botInput.disabled = true;
+
+    // Add loading message with progress
+    const botMessage = document.createElement('div');
+    botMessage.className = 'bot-message bot-message-loading';
+    botMessage.innerHTML = '<div class="bot-message-text"><span id="loading-text">🤔 Thinking...</span></div>';
+    botMessages.appendChild(botMessage);
+    botMessages.scrollTop = botMessages.scrollHeight;
+
+    // Update loading message every few seconds with time estimates
+    let loadingStep = 0;
+    const hasImage = imageEmbedded ? true : false;
+    const isComplexQuery = message.length > 50 || message.includes('analyze') || message.includes('compare') || message.includes('explain') || message.includes('visualize') || hasImage;
+    
+    const loadingMessages = isComplexQuery ? [
+        hasImage ? '📸 Processing image... Please wait ~2 minutes' : '🤔 Processing complex request... Please wait ~2 minutes',
+        hasImage ? '🎨 AI is analyzing your image with Nano Banana technology...' : '🧠 AI is analyzing your request thoroughly...',
+        '🔍 Searching through product data and generating insights...',
+        hasImage ? '🖼️ Generating image-based recommendations...' : '🎨 Processing and generating recommendations...',
+        '✨ Almost ready with detailed response...',
+        '⏳ Complex AI processing takes time - thank you for waiting!'
+    ] : [
+        '🤔 Thinking... Please wait ~1 minute for response',
+        '🧠 Processing your request...',
+        '🔍 Searching for the best answers...',
+        '✨ Almost ready...',
+        '⏳ AI is working on your request...'
+    ];
+    
+    const loadingInterval = setInterval(() => {
+        const loadingElement = document.getElementById('loading-text');
+        if (loadingElement && botMessage.classList.contains('bot-message-loading')) {
+            loadingStep = (loadingStep + 1) % loadingMessages.length;
+            loadingElement.textContent = loadingMessages[loadingStep];
+        } else {
+            clearInterval(loadingInterval);
+        }
+    }, 3000);
+
+    try {
+        // Call the new agent service instead of the old shopping assistant
+        const requestBody = {
+            message: message,
+            user_id: userId,
+            session_id: sessionId
+        };
+        
+        // Add image context if available
+        if (imageEmbedded) {
+            requestBody.context = {
+                image_url: imageEmbedded // The agent can handle base64 images
+            };
+        }
+
+        // Create AbortController for timeout handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 150000); // 2.5 minutes timeout
+
+        const response = await fetch('{{ $.baseUrl }}/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const responseJson = await response.json();
+        
+        // Update bot message with response (render Markdown)
+        clearInterval(loadingInterval);
+        botMessage.classList.remove('bot-message-loading');
+        const markdownContent = marked.parse(responseJson.response);
+        botMessage.innerHTML = `<div class="bot-message-text bot-message-markdown">${markdownContent}</div>`;
+        
+        // Extract and display products if any
+        const extractedIds = extractIdsFromStringEmbedded(responseJson.response);
+        if (extractedIds.length > 0) {
+            const botProductsDiv = document.createElement('div');
+            botProductsDiv.classList.add('bot-products');
+
+            for (const id of extractedIds) {
+                try {
+                    const productResponse = await fetch(`{{ $.baseUrl }}/product-meta/${id}`);
+                    const product = await productResponse.json();
+
+                    const botProductDiv = document.createElement('a');
+                    botProductDiv.className = 'bot-product';
+                    botProductDiv.href = `{{ $.baseUrl }}/product/${id}`;
+                    
+                    botProductDiv.innerHTML = `
+                        <img src="${product.picture}" class="bot-product-img" onerror="this.style.display='none';">
+                        <div class="bot-product-description">
+                            <b>${product.name}</b><br>
+                            ${product.description.length > 200 ? product.description.substring(0, 200) + '...' : product.description}
+                        </div>
+                    `;
+                    
+                    botProductsDiv.appendChild(botProductDiv);
+                } catch (e) {
+                    console.error('Error fetching product:', id, e);
+                }
+            }
+            botMessages.appendChild(botProductsDiv);
+        }
+
+        // Clear image after sending
+        imageEmbedded = null;
+        
+    } catch (error) {
+        console.error('Error:', error);
+        clearInterval(loadingInterval);
+        botMessage.classList.remove('bot-message-loading');
+        
+        let errorMessage = 'Sorry, I encountered an error. Please try again.';
+        if (error.name === 'AbortError') {
+            errorMessage = '⏱️ The request is taking longer than expected. The AI is thinking hard! Please wait or try a simpler question.';
+        } else if (error.message.includes('timeout')) {
+            errorMessage = '⏱️ Request timed out. The AI service might be busy. Please try again in a moment.';
+        } else if (error.message.includes('fetch')) {
+            errorMessage = '🔌 Connection error. Please check if the services are running and try again.';
+        }
+        
+        botMessage.innerHTML = `<div class="bot-message-text bot-message-markdown"><p>${errorMessage}</p></div>`;
+    }
+
+    botMessages.scrollTop = botMessages.scrollHeight;
+    botButton.disabled = false;
+    botInput.disabled = false;
+    botInput.focus();
+}
+
+// Initialize embedded chatbot
+document.addEventListener('DOMContentLoaded', function() {
+    const botButton = document.getElementById('bot-input-button-embedded');
+    const botInput = document.getElementById('bot-input-text-embedded');
+    
+    if (botButton) {
+        botButton.addEventListener('click', handleEmbeddedButtonClick);
+    }
+    
+    if (botInput) {
+        botInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                handleEmbeddedButtonClick();
+            }
+        });
+    }
+});
+</script>
+
+<!-- Markdown parsing library -->
+<script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/js/bootstrap.min.js"
     integrity="sha384-smHYKdLADwkXOn1EmN1qk/HfnUcbVRZyYmZ4qpPea6sjB/pTJ0euyQp0Mk8ck+5T" crossorigin="anonymous">
 </script>

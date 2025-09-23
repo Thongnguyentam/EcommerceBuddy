@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -625,6 +626,87 @@ func (fe *frontendServer) chatBotHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(Response{Message: response.Content})
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// New AI Agent Chat Handler
+func (fe *frontendServer) aiChatHandler(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+	
+	type ChatRequest struct {
+		Message   string                 `json:"message"`
+		UserID    string                 `json:"user_id"`
+		SessionID string                 `json:"session_id"`
+		Context   map[string]interface{} `json:"context,omitempty"`
+	}
+
+	type ChatResponse struct {
+		Response    string   `json:"response"`
+		AgentUsed   string   `json:"agent_used"`
+		ToolsCalled []string `json:"tools_called"`
+		SessionID   string   `json:"session_id"`
+	}
+
+	// Parse request body
+	var chatReq ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&chatReq); err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to parse request body"), http.StatusBadRequest)
+		return
+	}
+
+	// Forward to agent service
+	agentServiceURL := "http://" + fe.shoppingAssistantSvcAddr + "/chat"
+	
+	reqBody, err := json.Marshal(chatReq)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to marshal request"), http.StatusInternalServerError)
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, agentServiceURL, bytes.NewBuffer(reqBody))
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to create request"), http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 120 * time.Second} // Extended timeout for AI processing
+	res, err := client.Do(req)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to send request to agent service"), http.StatusInternalServerError)
+		return
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to read response"), http.StatusInternalServerError)
+		return
+	}
+
+	if res.StatusCode != http.StatusOK {
+		log.WithField("status", res.StatusCode).WithField("body", string(body)).Error("Agent service returned error")
+		renderHTTPError(log, r, w, errors.New("agent service error"), http.StatusInternalServerError)
+		return
+	}
+
+	var chatResp ChatResponse
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to unmarshal agent response"), http.StatusInternalServerError)
+		return
+	}
+
+	// Log successful interaction
+	log.WithFields(logrus.Fields{
+		"user_id":      chatReq.UserID,
+		"session_id":   chatReq.SessionID,
+		"agent_used":   chatResp.AgentUsed,
+		"tools_called": chatResp.ToolsCalled,
+	}).Info("AI chat interaction completed")
+
+	// Return response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(chatResp)
 }
 
 func (fe *frontendServer) setCurrencyHandler(w http.ResponseWriter, r *http.Request) {

@@ -30,10 +30,21 @@
         <div id="chat-modal" class="chat-modal">
           <div id="bot-messages" class="bot-messages">
             <p class="bot-message">
-              <span class="bot-message-text">Hi, I'm the Cymbal Shops assistant. I can help you with your shopping experience.</span>
+              <div class="bot-message-text bot-message-markdown">
+                <p>👋 Hi! I'm <strong>EcommerceBuddy</strong>, your AI shopping assistant powered by <em>Gemini 2.5 Flash</em>.</p>
+              </div>
             </p>
             <p class="bot-message">
-              <span class="bot-message-text">What can I help you with?</span>
+              <div class="bot-message-text bot-message-markdown">
+                <p>I can help you:</p>
+                <ul>
+                  <li><strong>Find products</strong> using natural language</li>
+                  <li><strong>Analyze images</strong> with "Nano Banana" visualization</li>
+                  <li><strong>Manage your cart</strong> and checkout</li>
+                  <li><strong>Answer questions</strong> about our store</li>
+                </ul>
+                <p>What can I help you with today? 🛍️</p>
+              </div>
             </p>
           </div>
           <div class="bot-input">
@@ -46,6 +57,8 @@
     </div>
   </div>
 </main>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
 
 <script>
   var image;
@@ -130,15 +143,17 @@
     botMessages.appendChild(botMessage);
     botMessages.scrollTo(0, botMessages.scrollHeight);
 
-    // Request a response from the Shopping Assistant
-    const response = await fetch("{{ $.baseUrl }}/bot", {
+    // Request a response from the AI Agent Service
+    const response = await fetch("{{ $.baseUrl }}/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         message: message,
-        image: image
+        user_id: "{{ $.session_id }}" || "user_" + Date.now(),
+        session_id: "{{ $.session_id }}" || "session_" + Date.now(),
+        context: image ? { image_url: image } : undefined
       }),
     });
     const responseJson = await response.json();
@@ -148,10 +163,14 @@
     const extractedIds = extractIdsFromString(responseJson.message);
     console.log(extractedIds);
 
-    // Replace the placeholder bot message text with the real response
-    // Making sure to remove any lists or product IDs from that message
-    botMessageSpan.innerText = responseJson.message.replace(/\n+[-*\d][\S\s]*/g, "");
+    // Replace the placeholder bot message text with the real response (render Markdown)
     botMessage.classList.remove("bot-message-loading");
+    const markdownContent = marked.parse(responseJson.response);
+    botMessageSpan.innerHTML = markdownContent;
+    botMessageSpan.classList.add("bot-message-markdown");
+
+    // Extract product IDs from the response
+    const extractedIds = extractIdsFromString(responseJson.response);
 
     // If there are any product IDs...
     if (extractedIds.length > 0) {
