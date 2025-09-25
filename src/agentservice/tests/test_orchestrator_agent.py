@@ -129,29 +129,37 @@ async def test_orchestrator_agent():
         # },
         # {
         #     "name": "Multi-currency shopping",
-        #     "query": "Show me all laptops, convert their prices to Japanese Yen, and tell me which ones have the best reviews.",
+        #     "query": "Show me all shirts or t-shirts, convert their prices to Japanese Yen, and tell me which ones have the best reviews.",
         #     "context": {
-        #         "target_currency": "JPY",
-        #         "product_type": "laptop"
-        #     }Error analyzing image:
+        #         # "target_currency": "JPY",
+        #         # "product_type": "laptop"
+        #     }
         # },
         # {
         #     "name": "Image analysis and product matching",
-        #     "query": "Analyze this room image (https://www.anvekitchenandbath.com/wp-content/uploads/2022/12/modern-minimalist-kitchen-1200x630-cropped.jpeg) and recommend products that would fit the style, then show me reviews for the top recommendation.",
+        #     "query": "Analyze this room image and recommend products that would fit the style, then show me reviews for the top recommendation.",
         #     "context": {
         #         "image_url": "https://www.anvekitchenandbath.com/wp-content/uploads/2022/12/modern-minimalist-kitchen-1200x630-cropped.jpeg",
         #         "style_preference": "modern"
         #     }
         # },
         {
-            "name": "Cart management workflow",
-            "query": "Show me what's in my cart, convert all prices to British Pounds, and if the total is over £100, remove the cheapest item.",
+            "name": "Image analysis and product matching",
+            "query": "Find the best clock that match my kitchen and show mehow does it look in my kitchent",
             "context": {
-                "user_id": "test_user_123",
-                "target_currency": "GBP",
-                "budget_limit": 100
+                "image_url": "https://www.anvekitchenandbath.com/wp-content/uploads/2022/12/modern-minimalist-kitchen-1200x630-cropped.jpeg",
+                # "style_preference": "modern"
             }
-        }
+        },
+        # {
+        #     "name": "Cart management workflow",
+        #     "query": "Show me what's in my cart, convert all prices to British Pounds, and if the total is over £100, remove the cheapest item.",
+        #     "context": {
+        #         "user_id": "test_user_123",
+        #         "target_currency": "GBP",
+        #         "budget_limit": 100
+        #     }
+        # }
     ]
     
     print(f"\n🧪 Testing Orchestrator with {len(test_queries)} Complex Queries")

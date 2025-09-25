@@ -15,7 +15,7 @@ from typing import Dict, Any, List, Optional
 from agents.base_agent import BaseAgent
 from agents.utils import clean_and_parse_json, validate_tool_plan
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.INFO)
 class CartAgent(BaseAgent):
     """Agent specialized in shopping cart operations."""
     
@@ -54,7 +54,8 @@ class CartAgent(BaseAgent):
         try:
             # Analyze request and determine tools to use
             available_tools = self.get_available_tools()
-            tool_plan = await self._plan_tool_usage(message, available_tools, user_id)
+            tool_plan = await self._plan_tool_usage(message, available_tools, user_id, context)
+            logger.info(f"CartAgent tool plan: {tool_plan}")
             
             # Execute tools
             results = []
@@ -105,13 +106,14 @@ class CartAgent(BaseAgent):
             }
     
     async def _plan_tool_usage(self, message: str, available_tools: List[Dict[str, Any]], 
-                              user_id: str) -> Dict[str, Any]:
+                              user_id: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Plan which tools to use for the cart request."""
         
         prompt = self.create_tool_calling_prompt(message, available_tools)
         
         # Add cart-specific guidance
         prompt += f"""
+Context for previous steps: {json.dumps(context) if context else "No context"}
 
 User ID: {user_id}
 
@@ -120,6 +122,14 @@ Cart-specific guidelines:
 - Use get_cart_contents when user wants to see what's in their cart
 - Use clear_cart when user wants to empty their cart
 - Always include user_id in parameters
+
+IMPORTANT: If context contains responses from other agents, use that information to identify products to work with the cart.
+- If context has product_agent_response with product IDs, use those IDs
+- If context has image_agent_response with product recommendations, operate on those products to cart
+- If context has sentiment_agent_response with product IDs, operate on those products to cart
+
+Context Analysis:
+- Check if context contains product data with product IDs
 
 Examples:
 - "Add this item to my cart" → add_to_cart (need to identify product_id from context)
@@ -146,39 +156,69 @@ Examples:
                 ],
                 "response_strategy": "Show current cart contents"
             }
-    
+        
     async def _generate_cart_response(self, original_message: str, results: List[Dict[str, Any]], 
                                     tool_plan: Dict[str, Any]) -> str:
-        """Generate a natural response based on cart operation results."""
+        """Return raw tool results instead of generating a natural response."""
         
-        response_prompt = f"""Generate a helpful response for a shopping cart request.
-
-Original request: {original_message}
-Strategy: {tool_plan.get('response_strategy', 'Present results')}
-
-Cart operation results:
-{json.dumps(results, indent=2)}
-
-Create a response that:
-1. Confirms what cart operation was performed
-2. Shows current cart status if relevant
-3. Mentions total items and price if available
-4. Suggests next steps (like checkout or adding more items)
-5. Is conversational and helpful
-
-If errors occurred, explain what went wrong and suggest alternatives.
-
-Response:"""
-
-        try:
-            response = await self.generate_response(response_prompt)
-            return response.strip()
-            
-        except Exception as e:
-            logger.error(f"Cart response generation failed: {str(e)}")
-            
-            # Fallback response based on results
-            if results and any('result' in r for r in results):
-                return "I've updated your cart. Let me know if you need to make any other changes!"
-            else:
-                return "I wasn't able to complete that cart operation. Please try again or let me know what specific action you'd like to take." 
+        # Extract cart data from results
+        cart_results = []
+        operation_results = []
+        
+        for result in results:
+            if 'result' in result and result['result']:
+                tool_result = result['result']
+                logger.debug(f"===========Cart tool result: {tool_result} ===========")
+                
+                if tool_result.get('status') == 'ok':
+                    # Handle different cart operations
+                    if 'items' in tool_result:
+                        # Cart contents response
+                        cart_data = {
+                            'user_id': tool_result.get('user_id', ''),
+                            'items': tool_result.get('items', []),
+                            'total_items': tool_result.get('total_items', 0),
+                            'status': tool_result.get('status', '')
+                        }
+                        cart_results.append(cart_data)
+                    
+                    elif 'message' in tool_result:
+                        # Operation response (add, clear)
+                        operation_data = {
+                            'status': tool_result.get('status', ''),
+                            'message': tool_result.get('message', ''),
+                            'operation': result.get('tool', 'unknown')
+                        }
+                        operation_results.append(operation_data)
+        
+        # Build response with raw data
+        response_parts = []
+        logger.debug(f"===========Cart results: {cart_results} ===========")
+        logger.debug(f"===========Operation results: {operation_results} ===========")
+        
+        if cart_results:
+            response_parts.append("**Cart Contents:**")
+            for cart in cart_results:
+                response_parts.append(f"User ID: {cart['user_id']}")
+                response_parts.append(f"Total Items: {cart['total_items']}")
+                response_parts.append(f"Status: {cart['status']}")
+                
+                if cart['items']:
+                    response_parts.append("\n**Items in Cart:**")
+                    for i, item in enumerate(cart['items'], 1):
+                        response_parts.append(f"  {i}. Product ID: {item.get('product_id', 'N/A')}")
+                        response_parts.append(f"     Quantity: {item.get('quantity', 'N/A')}")
+                else:
+                    response_parts.append("Cart is empty")
+        
+        if operation_results:
+            response_parts.append("**Cart Operations:**")
+            for operation in operation_results:
+                response_parts.append(f"Operation: {operation['operation']}")
+                response_parts.append(f"Status: {operation['status']}")
+                response_parts.append(f"Message: {operation['message']}")
+        
+        if not response_parts:
+            response_parts.append("No cart data available.")
+        
+        return "\n".join(response_parts)

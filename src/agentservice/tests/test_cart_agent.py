@@ -13,6 +13,15 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,  # show DEBUG and above
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger.setLevel(logging.INFO)
+
 # Add the parent directory and agents directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agents'))

@@ -23,9 +23,17 @@ from google import genai
 
 # Import agents after path setup
 from sentiment_agent import SentimentAgent
+import logging
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,  # show DEBUG and above
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger.setLevel(logging.INFO)
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 GOOGLE_CLOUD_REGION = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
+
 
 async def discover_tools_from_mcp(mcp_url: str) -> dict:
     """Discover tools from MCP server."""

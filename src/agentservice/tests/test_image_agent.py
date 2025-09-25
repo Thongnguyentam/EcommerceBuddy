@@ -50,15 +50,15 @@ async def test_image_agent_multiple_queries(mcp_url: str, tools_schema: dict):
             "message": "What objects do you see in this image?",
             "description": "Object detection query",
             "context": {
-                "image_url": "https://www.anvekitchenandbath.com/wp-content/uploads/2022/12/modern-minimalist-kitchen-1200x630-cropped.jpeg"
+                "image_url": "https://i.pinimg.com/736x/cb/f5/49/cbf549e2dc77cef0c4e9905323744e8a.jpg"
             }
         },
         {
-            "message": "Show me how this vase would look in my living room",
+            "message": "Show me how this Wall Clock (id: CLOCK001) would look in my living room",
             "description": "Product visualization request",
             "context": {
                 "base_image_url": "https://edwardgeorgelondon.com/wp-content/uploads/2024/04/A-collection-of-inspiring-real-life-minimalist-living-room-designs-showcasing-clean-lines-neutral-color-palettes-and-functional-furniture-arrangements.png",
-                "product_image_url": "https://www.thespruce.com/thmb/d-xScDVrgsogzOFdGEXCBl8_7Bs=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/SPR-types-of-lamp-vases-7096026-01-779b17f2283e4a61b66bde573bae3370.jpg"
+                "product_image_url": "https://www.ikea.com/us/en/images/products/pluttis-wall-clock-red__1013097_pe829051_s5.jpg"
             }
         }
     ]
@@ -95,7 +95,7 @@ async def test_image_agent_multiple_queries(mcp_url: str, tools_schema: dict):
                 
                 print(f"✅ Agent: {result['agent_used']}")
                 print(f"✅ Tools called: {result['tools_called']}")
-                print(f"✅ Response preview: {result['response']}...")
+                print(f"✅ Response preview: {result}...")
                 
             except Exception as e:
                 print(f"❌ Test {i} failed: {str(e)}")

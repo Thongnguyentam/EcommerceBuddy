@@ -15,6 +15,7 @@ from typing import Dict, Any, List, Optional
 from agents.base_agent import BaseAgent
 from agents.utils import clean_and_parse_json, validate_analysis_response, extract_parameters_safely
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class OrchestratorAgent(BaseAgent):
     """Orchestrator agent that coordinates domain agents and complex workflows."""
@@ -47,7 +48,7 @@ class OrchestratorAgent(BaseAgent):
             analysis = await self._analyze_request(message, context)
             
             # Step 2: Execute the planned workflow
-            result = await self._execute_workflow(analysis, message, user_id, session_id)
+            result = await self._execute_workflow(analysis, message, user_id, session_id, context)
             
             # Step 3: Update session
             self.update_session(session_id, message, result['response'], result['tools_called'])
@@ -106,7 +107,12 @@ Domain agents available:
 - image: Image analysis, product visualization, room analysis  
 - cart: Shopping cart management, add/remove items
 - currency: Currency conversion, pricing, formatting
-- sentiment: Review analysis, sentiment evaluation, product ratings"""
+- sentiment: Review analysis, sentiment evaluation, product ratings
+
+Workflow guidelines:
+- For product visualization: First use product agent to find the product, then image agent to create visualization
+- For image analysis: Use image agent directly
+- For product search: Use product agent directly"""
 
         try:
             response = await self.generate_response(analysis_prompt)
@@ -128,7 +134,7 @@ Domain agents available:
             
             # Validate and clean the analysis
             analysis = validate_analysis_response(analysis)
-            logger.info(f"Request analysis: {analysis['intent']} - Complexity: {analysis['complexity']}")
+            logger.debug(f"Request analysis: {analysis['intent']} - Complexity: {analysis['complexity']}")
             return analysis
             
         except Exception as e:
@@ -151,13 +157,13 @@ Domain agents available:
             }
     
     async def _execute_workflow(self, analysis: Dict[str, Any], original_message: str, 
-                               user_id: Optional[str], session_id: str) -> Dict[str, Any]:
+                               user_id: Optional[str], session_id: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute the planned workflow by delegating to domain agents."""
         
         workflow_steps = analysis.get('workflow_steps', [])
         tools_called = []
         step_results = []
-        
+        accumulated_context = context.copy() if context else {}
         # Execute steps sequentially, delegating to appropriate agents
         for step in workflow_steps:
             try:
@@ -167,15 +173,25 @@ Domain agents available:
                 
                 # Only delegate if we have the domain agent available
                 if should_delegate and domain in self._get_domain_agents():
-                    logger.info(f"Delegating step {step.get('step')} to {domain} agent")
-                    step_result = await self._delegate_to_domain_agent(step, original_message, user_id, session_id)
+                    logger.debug(f"Delegating step {step.get('step')} to {domain} agent")
+                    step_result = await self._delegate_to_domain_agent(step, original_message, user_id, session_id, accumulated_context)
                 else:
                     # Fallback to direct tool execution
-                    logger.info(f"Executing step {step.get('step')} directly (no delegation)")
-                    step_result = await self._execute_step(step, original_message, user_id, session_id)
+                    logger.debug(f"Executing step {step.get('step')} directly (no delegation)")
+                    step_result = await self._execute_step(step, original_message, user_id, session_id, context)
                 
                 step_results.append(step_result)
                 tools_called.extend(step_result.get('tools_used', []))
+                
+                if step_result.get('status') == 'completed' and 'results' in step_result:
+                    for result in step_result['results']:
+                        if 'agent_response' in result:
+                            accumulated_context[f'{domain}_response'] = result['agent_response']
+                            if 'tools_used' in step_result and step_result['tools_used']:
+                                accumulated_context[f'{domain}_tools_used'] = step_result['tools_used']
+                            
+                            # Store the domain that provided this context
+                            accumulated_context[f'{domain}_domain'] = domain
                 
             except Exception as e:
                 logger.error(f"Workflow step {step['step']} failed: {str(e)}")
@@ -195,7 +211,7 @@ Domain agents available:
         }
     
     async def _delegate_to_domain_agent(self, step: Dict[str, Any], original_message: str, 
-                                      user_id: Optional[str], session_id: str) -> Dict[str, Any]:
+                                      user_id: Optional[str], session_id: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Delegate a workflow step to the appropriate domain agent."""
         
         domain = step.get('domain', 'product')
@@ -206,13 +222,13 @@ Domain agents available:
         
         if domain not in domain_agents:
             logger.warning(f"Domain agent '{domain}' not available, falling back to direct execution")
-            return await self._execute_step(step, original_message, user_id, session_id)
+            return await self._execute_step(step, original_message, user_id, session_id, context)
         
         try:
             # Get the domain agent
             agent = domain_agents[domain]
             
-            logger.info(f"Delegating to {domain} agent: {action} (user_id: {user_id or 'anonymous'})")
+            logger.debug(f"Delegating to {domain} agent: {action} (user_id: {user_id or 'anonymous'})")
             
             # Prepare context with user information and orchestrator metadata
             delegation_context = {
@@ -223,9 +239,13 @@ Domain agents available:
                 "delegation_source": "orchestrator"
             }
             
-            # Debug logging
-            logger.info(f"Calling {domain} agent with message: '{original_message[:100]}...' user_id: {user_id}")
+            # Merge original context (which may contain image_url) with delegation context
+            if context:
+                delegation_context.update(context)
             
+            # Debug logging
+            logger.debug(f"Calling {domain} agent with message: '{original_message}...' user_id: {user_id}")
+            logger.debug(f"Context passed to {domain} agent: {list(delegation_context.keys())}")
             # Delegate the request to the domain agent
             agent_result = await agent.process_request(
                 message=original_message,
@@ -235,8 +255,7 @@ Domain agents available:
             )
             
             # Debug the agent result
-            logger.info(f"{domain} agent returned: tools_called={agent_result.get('tools_called', [])} response_length={len(agent_result.get('response', ''))}")
-            logger.info(f"{domain} agent full result keys: {list(agent_result.keys())}")
+            logger.debug(f"{domain} agent returned: tools_called={agent_result.get('tools_called', [])} response_length={len(agent_result.get('response', ''))}")
             
             # Convert agent result to step result format
             step_result = {
@@ -268,7 +287,7 @@ Domain agents available:
         return getattr(self, '_domain_agents', {})
     
     async def _execute_step(self, step: Dict[str, Any], original_message: str, 
-                           user_id: Optional[str], session_id: str) -> Dict[str, Any]:
+                           user_id: Optional[str], session_id: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute a single workflow step."""
         
         domain = step.get('domain')
@@ -288,7 +307,7 @@ Domain agents available:
         for tool_name in tools:
             try:
                 # Determine parameters based on the tool and user message
-                parameters = await self._determine_tool_parameters(tool_name, original_message, user_id)
+                parameters = await self._determine_tool_parameters(tool_name, original_message, user_id, context)
                 
                 # Call the tool
                 tool_result = await self.call_tool(tool_name, parameters)
@@ -303,7 +322,7 @@ Domain agents available:
         
         return step_result
     
-    async def _determine_tool_parameters(self, tool_name: str, message: str, user_id: Optional[str]) -> Dict[str, Any]:
+    async def _determine_tool_parameters(self, tool_name: str, message: str, user_id: Optional[str], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Determine parameters for a tool call based on the user message."""
         
         # Find tool schema
@@ -318,7 +337,7 @@ Domain agents available:
         
         # Special handling for image tools - extract URLs directly
         if tool_name in ['analyze_image', 'visualize_product']:
-            return self._extract_image_tool_parameters(tool_name, message, tool_schema)
+            return self._extract_image_tool_parameters(tool_name, message, tool_schema, context)
         
         # Use Gemini to extract parameters for other tools
         param_prompt = f"""Extract parameters for the tool '{tool_name}' from this user message.
@@ -359,70 +378,34 @@ Respond with only a JSON object containing the parameters:"""
                 
             return fallback_params
     
-    def _extract_image_tool_parameters(self, tool_name: str, message: str, tool_schema: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract parameters specifically for image tools using regex, including GCS URLs."""
-        import re
-        
-        # Extract URLs from message - enhanced to include cloud storage URLs
-        url_patterns = [
-            # Standard HTTP/HTTPS URLs
-            r'https?://[^\s<>"{}|\\^`\[\]]+(?:\.[^\s<>"{}|\\^`\[\]]+)*',
-            # Google Cloud Storage URLs
-            r'gs://[^\s<>"{}|\\^`\[\]]+',
-            # Google Cloud Storage HTTP URLs
-            r'https://storage\.googleapis\.com/[^\s<>"{}|\\^`\[\]]+',
-            r'https://storage\.cloud\.google\.com/[^\s<>"{}|\\^`\[\]]+',
-            # Firebase Storage URLs
-            r'https://firebasestorage\.googleapis\.com/[^\s<>"{}|\\^`\[\]]+',
-            # AWS S3 URLs
-            r'https://[^.\s]+\.s3\.amazonaws\.com/[^\s<>"{}|\\^`\[\]]+',
-            r's3://[^\s<>"{}|\\^`\[\]]+',
-            # Azure Blob Storage URLs
-            r'https://[^.\s]+\.blob\.core\.windows\.net/[^\s<>"{}|\\^`\[\]]+',
-        ]
-        
-        urls = []
-        for pattern in url_patterns:
-            found_urls = re.findall(pattern, message, re.IGNORECASE)
-            urls.extend(found_urls)
-        
-        # Remove duplicates while preserving order
-        urls = list(dict.fromkeys(urls))
+    def _extract_image_tool_parameters(self, tool_name: str, message: str, tool_schema: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Extract parameters for image tools from context (uploaded images)."""
         
         parameters = {}
         schema_params = tool_schema.get('parameters', {})
         
-        if tool_name == 'analyze_image':
-            if 'image_url' in schema_params and urls:
-                parameters['image_url'] = urls[0]
-            if 'context' in schema_params:
-                parameters['context'] = message[:200]  # First 200 chars as context
-                
-        elif tool_name == 'visualize_product':
-            if len(urls) >= 2:
-                if 'base_image_url' in schema_params:
-                    parameters['base_image_url'] = urls[0]
-                if 'product_image_url' in schema_params:
-                    parameters['product_image_url'] = urls[1]
-            elif len(urls) == 1:
-                # Try to determine which URL type based on context
-                message_lower = message.lower()
-                if any(keyword in message_lower for keyword in ['room', 'space', 'background', 'scene', 'environment']):
-                    if 'base_image_url' in schema_params:
-                        parameters['base_image_url'] = urls[0]
-                elif any(keyword in message_lower for keyword in ['product', 'item', 'furniture', 'object', 'thing']):
-                    if 'product_image_url' in schema_params:
-                        parameters['product_image_url'] = urls[0]
-                else:
-                    # Default to base image if unclear
-                    if 'base_image_url' in schema_params:
-                        parameters['base_image_url'] = urls[0]
+        # Image URL should come from context (frontend upload)
+        if context and 'image_url' in context:
+            logger.debug(f"Found image_url in context: {context['image_url'][:50]}...")
             
-            if 'prompt' in schema_params:
-                parameters['prompt'] = f"Visualize this product in the space: {message[:100]}"
+            if tool_name == 'analyze_image':
+                if 'image_url' in schema_params:
+                    parameters['image_url'] = context['image_url']
+                if 'context' in schema_params:
+                    parameters['context'] = message[:200]  # User's message as context
+                    
+            elif tool_name == 'visualize_product':
+                # For visualization, user's uploaded image is the base (room/space)
+                if 'base_image_url' in schema_params:
+                    parameters['base_image_url'] = context['image_url']
+                if 'prompt' in schema_params:
+                    parameters['prompt'] = f"Visualize this product in the space: {message[:100]}"
+                # Note: product_image_url would need to come from product search results
+            
+            logger.debug(f"Extracted image tool parameters from context for {tool_name}: {list(parameters.keys())}")
+        else:
+            logger.warning(f"No image_url found in context for {tool_name}, cannot proceed with image processing")
         
-        logger.info(f"Extracted image tool parameters for {tool_name}: {list(parameters.keys())}")
-        logger.debug(f"URLs found for {tool_name}: {urls[:2]}...")  # Log first 2 URLs for debugging
         return parameters
     
     async def _synthesize_response(self, analysis: Dict[str, Any], step_results: List[Dict[str, Any]], 

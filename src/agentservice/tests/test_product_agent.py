@@ -21,6 +21,15 @@ import httpx
 import vertexai
 from google import genai
 
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.DEBUG,  # show DEBUG and above
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger.setLevel(logging.DEBUG)
+
 # Import agents after path setup
 from product_agent import ProductAgent
 
@@ -104,7 +113,7 @@ async def test_product_agent_multiple_queries(mcp_url: str, tools_schema: dict):
                 
                 print(f"✅ Agent: {result['agent_used']}")
                 print(f"✅ Tools called: {result['tools_called']}")
-                print(f"✅ Response preview: {result['response']}...")
+                print(f"✅ Response preview: {result['response']}")
                 
             except Exception as e:
                 print(f"❌ Test {i} failed: {str(e)}")

@@ -16,7 +16,12 @@ from agents.base_agent import BaseAgent
 from agents.utils import clean_and_parse_json, extract_parameters_safely
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.DEBUG,  # show DEBUG and above
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
+logger.setLevel(logging.DEBUG)
 class ImageAgent(BaseAgent):
     """Agent specialized in image analysis and product visualization."""
     
@@ -50,6 +55,7 @@ class ImageAgent(BaseAgent):
             # Analyze request and determine tools to use
             available_tools = self.get_available_tools()
             tool_plan = await self._plan_tool_usage(message, available_tools, context, urls)
+            logger.info(f"ImageAgent tool plan: {tool_plan}")
             
             # Execute tools
             results = []
@@ -100,7 +106,7 @@ class ImageAgent(BaseAgent):
             }
     
     def _extract_urls(self, message: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, List[str]]:
-        """Extract URLs from message and context, including GCS URLs."""
+        """Extract image URLs from context (frontend uploads)."""
         urls = {
             "all_urls": [],
             "image_urls": [],
@@ -108,82 +114,18 @@ class ImageAgent(BaseAgent):
             "potential_product_urls": []
         }
         
-        # Enhanced URL pattern matching to include GCS and other cloud storage URLs
-        url_patterns = [
-            # Standard HTTP/HTTPS URLs
-            r'https?://[^\s<>"{}|\\^`\[\]]+(?:\.[^\s<>"{}|\\^`\[\]]+)*',
-            # Google Cloud Storage URLs
-            r'gs://[^\s<>"{}|\\^`\[\]]+',
-            # Google Cloud Storage HTTP URLs
-            r'https://storage\.googleapis\.com/[^\s<>"{}|\\^`\[\]]+',
-            r'https://storage\.cloud\.google\.com/[^\s<>"{}|\\^`\[\]]+',
-            # Firebase Storage URLs
-            r'https://firebasestorage\.googleapis\.com/[^\s<>"{}|\\^`\[\]]+',
-            # AWS S3 URLs
-            r'https://[^.\s]+\.s3\.amazonaws\.com/[^\s<>"{}|\\^`\[\]]+',
-            r's3://[^\s<>"{}|\\^`\[\]]+',
-            # Azure Blob Storage URLs
-            r'https://[^.\s]+\.blob\.core\.windows\.net/[^\s<>"{}|\\^`\[\]]+',
-        ]
-        
-        # Extract from message
-        for pattern in url_patterns:
-            message_urls = re.findall(pattern, message, re.IGNORECASE)
-            urls["all_urls"].extend(message_urls)
-        
-        # Extract from context
-        if context:
-            for key, value in context.items():
-                if isinstance(value, str):
-                    for pattern in url_patterns:
-                        context_urls = re.findall(pattern, value, re.IGNORECASE)
-                        urls["all_urls"].extend(context_urls)
-                    
-                    # Map specific context keys to URL types
-                    if key in ['base_image_url', 'room_image_url', 'scene_url']:
-                        urls["potential_base_urls"].extend([url for url in urls["all_urls"] if url in value])
-                    elif key in ['product_image_url', 'product_url', 'item_url']:
-                        urls["potential_product_urls"].extend([url for url in urls["all_urls"] if url in value])
-        
-        # Remove duplicates while preserving order
-        urls["all_urls"] = list(dict.fromkeys(urls["all_urls"]))
-        
-        # Classify URLs as likely image URLs based on extension, path, or cloud storage patterns
-        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.ico']
-        image_keywords = ['image', 'photo', 'picture', 'img', 'pic', 'thumbnail', 'avatar']
-        
-        for url in urls["all_urls"]:
-            url_lower = url.lower()
+        # Check for image_url in context (from frontend upload)
+        if context and 'image_url' in context:
+            image_url = context['image_url']
+            urls["all_urls"].append(image_url)
+            urls["image_urls"].append(image_url)
+            # User uploaded image is typically the base/room image
+            urls["potential_base_urls"].append(image_url)
             
-            # Check for image file extensions
-            if any(url_lower.endswith(ext) for ext in image_extensions):
-                urls["image_urls"].append(url)
-            # Check for image-related keywords in URL
-            elif any(keyword in url_lower for keyword in image_keywords):
-                urls["image_urls"].append(url)
-            # GCS and cloud storage URLs are often images if they don't have obvious non-image extensions
-            elif any(url_lower.startswith(prefix) for prefix in ['gs://', 'https://storage.googleapis.com/', 'https://firebasestorage.googleapis.com/']):
-                # Assume cloud storage URLs are images unless they have non-image extensions
-                non_image_extensions = ['.txt', '.json', '.xml', '.html', '.css', '.js', '.pdf', '.doc', '.docx']
-                if not any(url_lower.endswith(ext) for ext in non_image_extensions):
-                    urls["image_urls"].append(url)
-            # S3 and Azure blob URLs - similar logic
-            elif any(pattern in url_lower for pattern in ['.s3.amazonaws.com/', 's3://', '.blob.core.windows.net/']):
-                non_image_extensions = ['.txt', '.json', '.xml', '.html', '.css', '.js', '.pdf', '.doc', '.docx']
-                if not any(url_lower.endswith(ext) for ext in non_image_extensions):
-                    urls["image_urls"].append(url)
+            logger.debug(f"Found uploaded image URL in context: {image_url}...")
+        else:
+            logger.debug("No image_url found in context - user may not have uploaded an image")
         
-        # If no specific classification, treat all URLs as potential image URLs
-        if not urls["image_urls"] and urls["all_urls"]:
-            urls["image_urls"] = urls["all_urls"][:]
-        
-        # Remove duplicates from image URLs
-        urls["image_urls"] = list(dict.fromkeys(urls["image_urls"]))
-        urls["potential_base_urls"] = list(dict.fromkeys(urls["potential_base_urls"]))
-        urls["potential_product_urls"] = list(dict.fromkeys(urls["potential_product_urls"]))
-        
-        logger.info(f"Extracted URLs: {len(urls['all_urls'])} total, {len(urls['image_urls'])} image URLs")
-        logger.debug(f"Image URLs found: {urls['image_urls'][:3]}...")  # Log first 3 URLs for debugging
         return urls
     
     async def _plan_tool_usage(self, message: str, available_tools: List[Dict[str, Any]], 
@@ -209,6 +151,12 @@ Image-specific guidelines:
 - Always extract URLs from the user message or context
 - If multiple URLs are provided, determine which is the base image and which is the product
 
+IMPORTANT: If context contains responses from other agents, use that information to enhance image processing.
+- If context has product_agent_response with product images urls, use those for visualization or analysis
+- Look for product information in the context and use those products' images urls for visualization or analysis
+
+Context Analysis:
+- Check if context contains product data with product images urls
 Examples:
 - "What's in this image? [URL]" → analyze_image with image_url
 - "Show me how this couch would look in my room [room_URL] [couch_URL]" → visualize_product
@@ -308,24 +256,24 @@ URL Assignment Rules:
         
         # If we have 2+ URLs and visualization intent, use visualize_product
         if len(urls['image_urls']) >= 2 and (is_visualization or not is_analysis):
-            return {
+                return {
                 "reasoning": "Multiple URLs detected with visualization intent",
-                "tools_to_call": [
-                    {
-                        "tool_name": "visualize_product",
-                        "parameters": {
+                    "tools_to_call": [
+                        {
+                            "tool_name": "visualize_product",
+                            "parameters": {
                             "base_image_url": urls['image_urls'][0],
                             "product_image_url": urls['image_urls'][1],
                             "prompt": f"Visualize this product in the space: {message[:100]}"
-                        },
+                            },
                         "reasoning": "Using first URL as base image and second as product"
-                    }
-                ],
-                "response_strategy": "Show visualization result"
-            }
+                        }
+                    ],
+                    "response_strategy": "Show visualization result"
+                }
         
         # Default to image analysis
-        return {
+                return {
             "reasoning": "Single URL or analysis intent detected",
             "tools_to_call": [
                 {
@@ -375,77 +323,64 @@ URL Assignment Rules:
                     enhanced_params[param_name] = message[:200]
         
         # Log parameter validation
-        logger.info(f"Enhanced parameters for {tool_name}: {list(enhanced_params.keys())}")
+        logger.debug(f"Enhanced parameters for {tool_name}: {list(enhanced_params.keys())}")
         
         return enhanced_params
     
     async def _generate_image_response(self, original_message: str, results: List[Dict[str, Any]], 
-                                     tool_plan: Dict[str, Any]) -> str:
-        """Generate a natural response based on image processing results."""
+                                 tool_plan: Dict[str, Any]) -> str:
+        """Return raw tool results instead of generating a natural response."""
         
-        # Extract URLs directly from results to avoid Gemini processing them
+        # Extract URLs directly from results
         visualization_urls = []
+        analysis_results = []
+        
         for result in results:
             if result.get('tool') == 'visualize_product' and 'result' in result:
                 tool_result = result['result']
-                if tool_result.get('success') and 'visualization' in tool_result:
+                if (tool_result.get('success') or tool_result.get('status')) and 'visualization' in tool_result:
                     render_url = tool_result['visualization'].get('render_url')
                     if render_url:
                         visualization_urls.append(render_url)
+            
+            elif result.get('tool') == 'analyze_image' and 'result' in result:
+                tool_result = result['result']
+                if tool_result.get('success') or tool_result.get('status'):                    # Extract the actual analysis data
+                    analysis_data_dict = tool_result.get('analysis', {})
+                    logger.debug(f"===========Analysis data dictionary: {analysis_data_dict} ===========")
+                    analysis_data = {
+                        'objects': analysis_data_dict.get('objects', []),
+                        'scene_type': analysis_data_dict.get('scene_type', ''),
+                        'styles': analysis_data_dict.get('styles', []),
+                        'colors': analysis_data_dict.get('colors', []),
+                        'tags': analysis_data_dict.get('tags', [])
+                    }
+                    analysis_results.append(analysis_data)
         
-        # Create a simplified prompt without the full JSON to avoid URL encoding issues
-        results_summary = []
-        for result in results:
-            if 'error' in result:
-                results_summary.append(f"Error with {result.get('tool', 'unknown tool')}: {result['error']}")
-            elif result.get('tool') == 'analyze_image':
-                if result.get('result', {}).get('success'):
-                    results_summary.append("Image analysis completed successfully")
-                else:
-                    results_summary.append("Image analysis failed")
-            elif result.get('tool') == 'visualize_product':
-                if result.get('result', {}).get('success'):
-                    results_summary.append("Product visualization completed successfully")
-                else:
-                    results_summary.append("Product visualization failed")
+        # Build response with raw data
+        response_parts = []
+        logger.debug(f"===========Analysis results: {analysis_results} ===========")
+        if analysis_results:
+            response_parts.append("**Image Analysis Results:**")
+            for analysis in analysis_results:
+                if analysis.get('objects'):
+                    response_parts.append(f"Objects detected: {[obj.get('label', 'unknown') for obj in analysis['objects']]}")
+                if analysis.get('scene_type'):
+                    response_parts.append(f"Scene type: {analysis['scene_type']}")
+                if analysis.get('styles'):
+                    response_parts.append(f"Styles: {analysis['styles']}")
+                if analysis.get('colors'):
+                    response_parts.append(f"Colors: {analysis['colors']}")
+                if analysis.get('tags'):
+                    response_parts.append(f"Tags: {analysis['tags']}")
         
-        response_prompt = f"""Generate a helpful response for an image processing request.
-
-Original request: {original_message}
-Strategy: {tool_plan.get('response_strategy', 'Present results')}
-
-Results summary: {'; '.join(results_summary)}
-
-Create a response that:
-1. Acknowledges what the user requested
-2. Describes what was found or created clearly
-3. For visualizations, mentions that an image was generated
-4. Is conversational and helpful
-
-Do not include any URLs in your response - they will be added separately.
-
-Response:"""
-
-        try:
-            base_response = await self.generate_response(response_prompt)
-            base_response = base_response.strip()
-            
-            # Add visualization URLs directly without letting Gemini process them
-            if visualization_urls:
-                base_response += "\n\n"
-                for i, url in enumerate(visualization_urls, 1):
-                    base_response += f"[Generated Image {i}]({url})\n\n"
-                base_response += "Take a look and see how it fits with your decor. Would you like to try visualizing it in another spot, or perhaps with a different product?"
-            
-            return base_response
-            
-        except Exception as e:
-            logger.error(f"Image response generation failed: {str(e)}")
-            
-            # Fallback response with direct URL if available
-            if visualization_urls:
-                return f"I've generated a visualization for you! You can view it here: {visualization_urls[0]}"
-            elif results and any('result' in r for r in results):
-                return "I've processed your image request. The results are ready for you to view!"
-            else:
-                return "I wasn't able to process your image request. Please make sure you've provided valid image URLs and try again." 
+        if visualization_urls:
+            response_parts.append("**Visualization Results:**")
+            for i, url in enumerate(visualization_urls, 1):
+                response_parts.append(f"Generated image {i}: {url}")
+        
+        if not response_parts:
+            return "No results available from image processing tools."
+        logger.debug(f"===========Response parts: {response_parts} ===========")
+        return "\n\n".join(response_parts)
+    
