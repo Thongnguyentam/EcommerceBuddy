@@ -31,7 +31,7 @@
           <div id="bot-messages" class="bot-messages">
             <p class="bot-message">
               <div class="bot-message-text bot-message-markdown">
-                <p>👋 Hi! I'm <strong>EcommerceBuddy</strong>, your AI shopping assistant powered by <em>Gemini 2.5 Flash</em>.</p>
+                <p>👋 Hi! I'm <strong>EcommerceBuddy</strong>, your AI shopping assistant powered by <em>Gemini 2.5 Flash and GKE</em>.</p>
               </div>
             </p>
             <p class="bot-message">
@@ -100,9 +100,46 @@
     });
   }
 
+  function removeImageUrlsFromText(text) {
+    const imageUrlPattern = /https:\/\/storage\.googleapis\.com\/[^\s\)]*\.(jpg|jpeg|png|gif|webp)[^\s\)]*/gi;
+    return text.replace(imageUrlPattern, '').replace(/\s+/g, ' ').trim();
+  }
+
+  function extractAndDisplayImages(text) {
+    const imageUrlPattern = /https:\/\/storage\.googleapis\.com\/[^\s\)]*\.(jpg|jpeg|png|gif|webp)[^\s\)]*/gi;
+    const imageUrls = text.match(imageUrlPattern);
+    console.log("=========== imageUrls: ", imageUrls);
+
+    if (imageUrls && imageUrls.length > 0) {
+      // Create image display container
+      const imageContainer = document.createElement('div');
+      imageContainer.className = 'bot-images';
+      
+      imageUrls.forEach((url, index) => {
+        const imageDiv = document.createElement('div');
+        imageDiv.className = 'bot-image-item';
+        
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = 'bot-image';
+        img.alt = `Generated image ${index + 1}`;
+        img.onerror = function() { 
+          this.style.display = 'none'; 
+          console.error('Failed to load image:', url);
+        };
+        
+        imageDiv.appendChild(img);
+        imageContainer.appendChild(imageDiv);
+      });
+      
+      return imageContainer;
+    }
+    return null;
+  }
+
   async function handleButtonClick() {
     if(!botinput.value || !botinput.value.trim){
-      return;
+        return;
     }
 
     // Construct and render user message
@@ -145,77 +182,82 @@
 
     // Request a response from the AI Agent Service
     const response = await fetch("{{ $.baseUrl }}/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message: message,
-        user_id: "{{ $.session_id }}" || "user_" + Date.now(),
-        session_id: "{{ $.session_id }}" || "session_" + Date.now(),
-        context: image ? { image_url: image } : undefined
-      }),
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            message: message,
+            user_id: "{{ $.session_id }}" || "user_" + Date.now(),
+            session_id: "{{ $.session_id }}" || "session_" + Date.now(),
+            context: image ? { image_url: image } : undefined
+        }),
     });
     const responseJson = await response.json();
     console.log(responseJson);
 
-    // Fetch the product IDs from the response
-    const extractedIds = extractIdsFromString(responseJson.message);
-    console.log(extractedIds);
-
     // Replace the placeholder bot message text with the real response (render Markdown)
     botMessage.classList.remove("bot-message-loading");
-    const markdownContent = marked.parse(responseJson.response);
+    
+    // Remove image URLs from text before rendering markdown
+    const textWithoutImages = removeImageUrlsFromText(responseJson.response);
+    const markdownContent = marked.parse(textWithoutImages);
     botMessageSpan.innerHTML = markdownContent;
     botMessageSpan.classList.add("bot-message-markdown");
+
+    // Extract and display images from the response
+    const imageContainer = extractAndDisplayImages(responseJson.response);
+    if (imageContainer) {
+        botMessage.appendChild(imageContainer);
+    }
 
     // Extract product IDs from the response
     const extractedIds = extractIdsFromString(responseJson.response);
 
     // If there are any product IDs...
     if (extractedIds.length > 0) {
-      // Construct root products div
-      const botProductsDiv = document.createElement("div");
-      botProductsDiv.classList.add("bot-products");
+        // Construct root products div
+        const botProductsDiv = document.createElement("div");
+        botProductsDiv.classList.add("bot-products");
 
-      // For each product...
-      for (const id of extractedIds) {
-        // Retrieve product metadata from the Product Catalog
-        const productResponse = await fetch("{{ $.baseUrl }}/product-meta/" + id, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-        const product = await productResponse.json();
+        // For each product...
+        for (const id of extractedIds) {
+            // Retrieve product metadata from the Product Catalog
+            const productResponse = await fetch("{{ $.baseUrl }}/product-meta/" + id, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+            const product = await productResponse.json();
 
-        // Construct main product div
-        const botProductDiv = document.createElement("a");
-        botProductDiv.classList.add("bot-product");
-        botProductDiv.href = "{{ $.baseUrl }}/product/" + id;
+            // Construct main product div
+            const botProductDiv = document.createElement("a");
+            botProductDiv.classList.add("bot-product");
+            botProductDiv.href = "{{ $.baseUrl }}/product/" + id;
 
-        // Construct product image
-        const botProductImg = document.createElement("img");
-        botProductImg.src = product["picture"];
-        botProductImg.classList.add("bot-product-img");
-        botProductImg.onerror = function() { this.style.display = 'none'; };
-        botProductDiv.appendChild(botProductImg);
+            // Construct product image
+            const botProductImg = document.createElement("img");
+            botProductImg.src = product["picture"];
+            botProductImg.classList.add("bot-product-img");
+            botProductImg.onerror = function() { this.style.display = 'none'; };
+            botProductDiv.appendChild(botProductImg);
 
-        // Construct product description div
-        const botProductDescription = document.createElement("div");
-        botProductDescription.classList.add("bot-product-description");
-        let productDescription = product["description"];
-        if (productDescription.length > 350) { // Shorten descriptions that are too long
-          productDescription = productDescription.substring(0, 330) + '...';
+            // Construct product description div
+            const botProductDescription = document.createElement("div");
+            botProductDescription.classList.add("bot-product-description");
+            let productDescription = product["description"];
+            if (productDescription.length > 350) { // Shorten descriptions that are too long
+                productDescription = productDescription.substring(0, 330) + '...';
+            }
+            botProductDescription.innerHTML = "<b>" + product["name"] + "</b><br>" + productDescription;
+            botProductDiv.appendChild(botProductDescription);
+
+            // Append main product div into the root products div
+            botProductsDiv.appendChild(botProductDiv);
         }
-        botProductDescription.innerHTML = "<b>" + product["name"] + "</b><br>" + productDescription;
-        botProductDiv.appendChild(botProductDescription);
-
-        // Append main product div into the root products div
-        botProductsDiv.appendChild(botProductDiv);
-      }
-      // Render products
-      botMessages.appendChild(botProductsDiv)
+        // Render products
+        botMessages.appendChild(botProductsDiv)
     }
 
     botMessages.scrollTo(0, botMessages.scrollHeight);
@@ -224,7 +266,7 @@
     botbutton.disabled = false;
     botinput.disabled = false;
     botinput.focus();
-  }
+}
 
   main();
 </script>

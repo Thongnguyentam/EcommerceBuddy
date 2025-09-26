@@ -182,6 +182,10 @@ main() {
     export ENABLE_PROFILER=0
     export ENABLE_ASSISTANT=true
     
+    # Google Cloud Configuration
+    export GOOGLE_CLOUD_PROJECT="gke-hack-471804"
+    export GCS_UPLOADS_BUCKET="${GOOGLE_CLOUD_PROJECT}-user-uploads"
+    
     # Service addresses pointing to port-forwarded services
     export PRODUCT_CATALOG_SERVICE_ADDR="localhost:3550"
     export CURRENCY_SERVICE_ADDR="localhost:7000"

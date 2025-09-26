@@ -106,30 +106,133 @@ function closeChatbot(event) {
 }
 
 // Enhanced Chatbot Functionality
-let imageEmbedded;
+let currentImageUrl = null; // Store GCS URL instead of base64
+let currentImagePreview = null; // Store reference to preview element
 let sessionId = '{{ $.session_id }}' || 'session_' + Date.now();
 let userId = sessionId; // Use session ID as user ID
 
-function getBase64Embedded() {
+async function uploadImageToGCS() {
     const file = document.getElementById('bot-input-file-embedded').files[0];
     if (!file) return;
+
+    // Show upload progress above the input area
+    const chatModal = document.getElementById('chat-modal-embedded');
+    const botInput = document.querySelector('.bot-input-embedded');
+    const uploadingDiv = document.createElement('div');
+    uploadingDiv.className = 'uploading-message';
+    uploadingDiv.innerHTML = `
+        <div style="display: flex; align-items: center; padding: 10px; background: rgba(128, 128, 128, 0.1); border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 8px; margin: 10px 0; position: relative;">
+            <div style="width: 60px; height: 60px; border-radius: 8px; margin-right: 12px; background: rgba(128, 128, 128, 0.2); display: flex; align-items: center; justify-content: center; font-size: 24px;">
+                📤
+            </div>
+            <div style="flex: 1; font-size: 14px; color: #333;">
+                <div style="font-weight: 500;">Uploading image...</div>
+                <div style="font-size: 12px; color: #666; margin-top: 2px;">Please wait</div>
+            </div>
+        </div>
+    `;
     
-    const reader = new FileReader();
-    reader.onloadend = function() {
-        imageEmbedded = reader.result;
-        // Show image preview
-        const botMessages = document.getElementById('bot-messages-embedded');
-        const imagePreview = document.createElement('div');
-        imagePreview.className = 'user-message';
-        imagePreview.innerHTML = `
-            <div class="user-image-div">
-                <img src="${imageEmbedded}" class="user-image" style="max-width: 200px; max-height: 150px; border-radius: 8px;">
+    // Insert before the input area
+    chatModal.insertBefore(uploadingDiv, botInput);
+
+    try {
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append('image', file);
+
+        // Upload to GCS via frontend
+        const response = await fetch('{{ $.baseUrl }}/upload-image', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error(`Upload failed: ${response.status}`);
+        }
+
+        const result = await response.json();
+        
+        if (!result.success) {
+            throw new Error(result.error || 'Upload failed');
+        }
+
+        // Remove uploading message
+        uploadingDiv.remove();
+
+        // Remove previous image preview if exists
+        if (currentImagePreview) {
+            currentImagePreview.remove();
+        }
+
+        // Store the GCS URL
+        currentImageUrl = result.image_url;
+
+        // Show new image preview above the input area
+        const chatModal = document.getElementById('chat-modal-embedded');
+        const botInput = document.querySelector('.bot-input-embedded');
+        
+        currentImagePreview = document.createElement('div');
+        currentImagePreview.className = 'current-image-preview';
+        currentImagePreview.innerHTML = `
+            <div style="display: flex; align-items: center; padding: 10px; background: rgba(102, 126, 234, 0.1); border: 1px solid rgba(102, 126, 234, 0.3); border-radius: 8px; margin: 10px 0; position: relative;">
+                <img src="${currentImageUrl}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; margin-right: 12px;">
+                <div style="flex: 1; font-size: 14px; color: #333;">
+                    <div style="font-weight: 500;">📎 Image attached</div>
+                    <div style="font-size: 12px; color: #666; margin-top: 2px;">${result.filename}</div>
+                </div>
+                <button onclick="removeCurrentImage()" style="background: #ff4444; color: white; border: none; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;" title="Remove image">×</button>
             </div>
         `;
-        botMessages.appendChild(imagePreview);
+        
+        // Insert before the input area
+        chatModal.insertBefore(currentImagePreview, botInput);
+
+        // Clear file input
+        document.getElementById('bot-input-file-embedded').value = '';
+
+    } catch (error) {
+        console.error('Image upload failed:', error);
+        
+        // Remove uploading message
+        if (uploadingDiv) {
+            uploadingDiv.remove();
+        }
+
+        // Show error message
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'user-message error-message';
+        errorDiv.innerHTML = `
+            <div style="padding: 10px; background: #ffe6e6; border: 1px solid #ffcccc; border-radius: 8px; color: #cc0000;">
+                ❌ Upload failed: ${error.message}
+            </div>
+        `;
+        botMessages.appendChild(errorDiv);
         botMessages.scrollTop = botMessages.scrollHeight;
-    };
-    reader.readAsDataURL(file);
+
+        // Remove error message after 5 seconds
+        setTimeout(() => {
+            if (botMessages.contains(errorDiv)) {
+                botMessages.removeChild(errorDiv);
+            }
+        }, 5000);
+    }
+}
+
+function removeCurrentImage() {
+    if (currentImagePreview) {
+        currentImagePreview.remove();
+    }
+    
+    currentImageUrl = null;
+    currentImagePreview = null;
+    
+    // Clear file input
+    document.getElementById('bot-input-file-embedded').value = '';
+}
+
+// Update the old function to use new upload system
+function getBase64Embedded() {
+    uploadImageToGCS();
 }
 
 function extractIdsFromStringEmbedded(message) {
@@ -173,7 +276,7 @@ async function handleEmbeddedButtonClick() {
 
     // Update loading message every few seconds with time estimates
     let loadingStep = 0;
-    const hasImage = imageEmbedded ? true : false;
+    const hasImage = currentImageUrl ? true : false;
     const isComplexQuery = message.length > 50 || message.includes('analyze') || message.includes('compare') || message.includes('explain') || message.includes('visualize') || hasImage;
     
     const loadingMessages = isComplexQuery ? [
@@ -210,9 +313,9 @@ async function handleEmbeddedButtonClick() {
         };
         
         // Add image context if available
-        if (imageEmbedded) {
+        if (currentImageUrl) {
             requestBody.context = {
-                image_url: imageEmbedded // The agent can handle base64 images
+                image_url: currentImageUrl // Send GCS signed URL to agent
             };
         }
 
@@ -240,8 +343,17 @@ async function handleEmbeddedButtonClick() {
         // Update bot message with response (render Markdown)
         clearInterval(loadingInterval);
         botMessage.classList.remove('bot-message-loading');
-        const markdownContent = marked.parse(responseJson.response);
+        
+        // Remove image URLs from text before rendering markdown
+        const textWithoutImages = removeImageUrlsFromTextEmbedded(responseJson.response);
+        const markdownContent = marked.parse(textWithoutImages);
         botMessage.innerHTML = `<div class="bot-message-text bot-message-markdown">${markdownContent}</div>`;
+        
+        // Extract and display images from the response as part of the bot message
+        const imageContainer = extractAndDisplayImagesEmbedded(responseJson.response);
+        if (imageContainer) {
+            botMessage.appendChild(imageContainer);
+        }
         
         // Extract and display products if any
         const extractedIds = extractIdsFromStringEmbedded(responseJson.response);
@@ -275,7 +387,9 @@ async function handleEmbeddedButtonClick() {
         }
 
         // Clear image after sending
-        imageEmbedded = null;
+        if (currentImageUrl) {
+            removeCurrentImage();
+        }
         
     } catch (error) {
         console.error('Error:', error);
@@ -318,6 +432,174 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+function removeImageUrlsFromTextEmbedded(text) {
+    const imageUrlPattern = /https:\/\/storage\.googleapis\.com\/[^\s\)]*\.(jpg|jpeg|png|gif|webp)[^\s\)]*/gi;
+    return text.replace(imageUrlPattern, '').replace(/\s+/g, ' ').trim();
+}
+
+function extractAndDisplayImagesEmbedded(text) {
+    const imageUrlPattern = /https:\/\/storage\.googleapis\.com\/[^\s\)]*\.(jpg|jpeg|png|gif|webp)[^\s\)]*/gi;
+    const imageUrls = text.match(imageUrlPattern);
+    
+    if (imageUrls && imageUrls.length > 0) {
+    // Create image display container
+    const imageContainer = document.createElement('div');
+    imageContainer.className = 'bot-images-embedded';
+    
+    imageUrls.forEach((url, index) => {
+        const imageDiv = document.createElement('div');
+        imageDiv.className = 'bot-image-item-embedded';
+        
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = 'bot-image-embedded';
+        img.alt = `Generated image ${index + 1}`;
+        img.onerror = function() { 
+        this.style.display = 'none'; 
+        console.error('Failed to load image:', url);
+        };
+        
+        imageDiv.appendChild(img);
+        imageContainer.appendChild(imageDiv);
+    });
+    
+    return imageContainer;
+    }
+    return null;
+}
+
+async function handleButtonClick() {
+    if(!botinput.value || !botinput.value.trim){
+        return;
+    }
+
+    // Construct and render user message
+    console.log("bot button clicked");
+    const message = botinput.value;
+    console.log("message: " + message);
+    const usermessage = document.createElement("p");
+    const userMessageSpan = document.createElement("span");
+    const imageDivElement = document.createElement("div");
+    imageDivElement.classList.add("user-image-div")
+    const imageElement = document.createElement("img");
+    imageElement.src = image;
+    imageElement.classList.add("user-image");
+    imageElement.onerror = function() { this.style.display = 'none'; };
+    userMessageSpan.innerText = message;
+    userMessageSpan.classList.add("user-message-text");
+    usermessage.classList.add("user-message");
+    usermessage.appendChild(userMessageSpan);
+    botMessages.appendChild(usermessage);
+    imageDivElement.appendChild(imageElement);
+    botMessages.appendChild(imageDivElement);
+    botMessages.scrollTo(0, botMessages.scrollHeight);
+    botinput.value = "";
+
+    // Disable send button and input field
+    botbutton.disabled = true;
+    botinput.disabled = true;
+    console.log("bot is typing");
+
+    // Construct and render placeholder bot message
+    const botMessage = document.createElement("p");
+    botMessage.classList.add("bot-message-loading");
+    const botMessageSpan = document.createElement("span");
+    botMessageSpan.innerText = ""
+    botMessageSpan.classList.add("bot-message-text");
+    botMessage.classList.add("bot-message");
+    botMessage.appendChild(botMessageSpan);
+    botMessages.appendChild(botMessage);
+    botMessages.scrollTo(0, botMessages.scrollHeight);
+
+    // Request a response from the AI Agent Service
+    const response = await fetch("{{ $.baseUrl }}/chat", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            message: message,
+            user_id: "{{ $.session_id }}" || "user_" + Date.now(),
+            session_id: "{{ $.session_id }}" || "session_" + Date.now(),
+            context: image ? { image_url: image } : undefined
+        }),
+    });
+    const responseJson = await response.json();
+    console.log(responseJson);
+
+    // Replace the placeholder bot message text with the real response (render Markdown)
+    botMessage.classList.remove("bot-message-loading");
+    
+    // Remove image URLs from text before rendering markdown
+    const textWithoutImages = removeImageUrlsFromTextEmbedded(responseJson.response);
+    const markdownContent = marked.parse(textWithoutImages);
+    botMessageSpan.innerHTML = markdownContent;
+    botMessageSpan.classList.add("bot-message-markdown");
+
+    // Extract and display images from the response as part of the bot message
+    const imageContainer = extractAndDisplayImagesEmbedded(responseJson.response);
+    if (imageContainer) {
+        botMessage.appendChild(imageContainer);
+    }
+
+    // Extract product IDs from the response
+    const extractedIds = extractIdsFromString(responseJson.response);
+
+    // If there are any product IDs...
+    if (extractedIds.length > 0) {
+        // Construct root products div
+        const botProductsDiv = document.createElement("div");
+        botProductsDiv.classList.add("bot-products");
+
+        // For each product...
+        for (const id of extractedIds) {
+            // Retrieve product metadata from the Product Catalog
+            const productResponse = await fetch("{{ $.baseUrl }}/product-meta/" + id, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+            const product = await productResponse.json();
+
+            // Construct main product div
+            const botProductDiv = document.createElement("a");
+            botProductDiv.classList.add("bot-product");
+            botProductDiv.href = "{{ $.baseUrl }}/product/" + id;
+
+            // Construct product image
+            const botProductImg = document.createElement("img");
+            botProductImg.src = product["picture"];
+            botProductImg.classList.add("bot-product-img");
+            botProductImg.onerror = function() { this.style.display = 'none'; };
+            botProductDiv.appendChild(botProductImg);
+
+            // Construct product description div
+            const botProductDescription = document.createElement("div");
+            botProductDescription.classList.add("bot-product-description");
+            let productDescription = product["description"];
+            if (productDescription.length > 350) { // Shorten descriptions that are too long
+                productDescription = productDescription.substring(0, 330) + '...';
+            }
+            botProductDescription.innerHTML = "<b>" + product["name"] + "</b><br>" + productDescription;
+            botProductDiv.appendChild(botProductDescription);
+
+            // Append main product div into the root products div
+            botProductsDiv.appendChild(botProductDiv);
+        }
+        // Render products
+        botMessages.appendChild(botProductsDiv)
+    }
+
+    botMessages.scrollTo(0, botMessages.scrollHeight);
+
+    // Re-enable button and input field
+    botbutton.disabled = false;
+    botinput.disabled = false;
+    botinput.focus();
+}
+
 </script>
 
 <!-- Markdown parsing library -->

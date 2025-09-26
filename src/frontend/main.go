@@ -23,6 +23,7 @@ import (
 
 	"cloud.google.com/go/profiler"
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -91,6 +92,12 @@ type frontendServer struct {
 }
 
 func main() {
+	// Load .env file if it exists
+	if err := godotenv.Load(); err != nil {
+		// Don't fail if .env doesn't exist, just log it
+		fmt.Printf("No .env file found or error loading it: %v\n", err)
+	}
+
 	ctx := context.Background()
 	log := logrus.New()
 	log.Level = logrus.DebugLevel
@@ -166,6 +173,7 @@ func main() {
 	r.HandleFunc(baseUrl + "/product-meta/{ids}", svc.getProductByID).Methods(http.MethodGet)
 	r.HandleFunc(baseUrl + "/bot", svc.chatBotHandler).Methods(http.MethodPost)
 	r.HandleFunc(baseUrl + "/chat", svc.aiChatHandler).Methods(http.MethodPost)
+	r.HandleFunc(baseUrl + "/upload-image", svc.uploadImageHandler).Methods(http.MethodPost)
 	r.HandleFunc(baseUrl + "/review", svc.createReviewHandler).Methods(http.MethodPost)
 	r.HandleFunc(baseUrl + "/review/{id}", svc.updateReviewHandler).Methods(http.MethodPost)
 	r.HandleFunc(baseUrl + "/review/{id}/delete", svc.deleteReviewHandler).Methods(http.MethodPost)

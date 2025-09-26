@@ -155,9 +155,9 @@ Context Analysis:
                 "tools_to_call": [],
                 "response_strategy": "Ask user to specify product or provide more context"
             }
-        
+    
     async def _generate_sentiment_response(self, original_message: str, results: List[Dict[str, Any]], 
-                                        tool_plan: Dict[str, Any]) -> str:
+                                         tool_plan: Dict[str, Any]) -> str:
         """Return raw tool results instead of generating a natural response."""
         
         # Extract review/sentiment data from results

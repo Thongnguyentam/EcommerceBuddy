@@ -328,7 +328,7 @@ URL Assignment Rules:
         return enhanced_params
     
     async def _generate_image_response(self, original_message: str, results: List[Dict[str, Any]], 
-                                 tool_plan: Dict[str, Any]) -> str:
+                                     tool_plan: Dict[str, Any]) -> str:
         """Return raw tool results instead of generating a natural response."""
         
         # Extract URLs directly from results
@@ -340,9 +340,9 @@ URL Assignment Rules:
                 tool_result = result['result']
                 if (tool_result.get('success') or tool_result.get('status')) and 'visualization' in tool_result:
                     render_url = tool_result['visualization'].get('render_url')
+                    logger.debug(f"===========Render url: {render_url} ===========")
                     if render_url:
                         visualization_urls.append(render_url)
-            
             elif result.get('tool') == 'analyze_image' and 'result' in result:
                 tool_result = result['result']
                 if tool_result.get('success') or tool_result.get('status'):                    # Extract the actual analysis data
@@ -360,6 +360,7 @@ URL Assignment Rules:
         # Build response with raw data
         response_parts = []
         logger.debug(f"===========Analysis results: {analysis_results} ===========")
+        logger.debug(f"===========Visualization urls: {visualization_urls} ===========")
         if analysis_results:
             response_parts.append("**Image Analysis Results:**")
             for analysis in analysis_results:
@@ -378,7 +379,6 @@ URL Assignment Rules:
             response_parts.append("**Visualization Results:**")
             for i, url in enumerate(visualization_urls, 1):
                 response_parts.append(f"Generated image {i}: {url}")
-        
         if not response_parts:
             return "No results available from image processing tools."
         logger.debug(f"===========Response parts: {response_parts} ===========")

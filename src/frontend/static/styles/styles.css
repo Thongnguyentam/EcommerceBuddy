@@ -1249,3 +1249,143 @@ the rules below could be extracted.
     max-height: 900px;
   }
 }
+
+/* Enhanced Image Upload Styles */
+.uploading-message {
+  opacity: 0.7;
+}
+
+.current-image-preview {
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+.current-image-preview button {
+  font-family: Arial, sans-serif;
+  font-weight: bold;
+  transition: all 0.2s ease;
+}
+
+.current-image-preview button:hover {
+  background: #cc0000 !important;
+  transform: scale(1.1);
+}
+
+.error-message {
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.user-image-div button {
+  font-family: Arial, sans-serif;
+  font-weight: bold;
+  transition: all 0.2s ease;
+}
+
+.user-image-div button:hover {
+  background: #cc0000 !important;
+  transform: scale(1.1);
+}
+
+/* Ensure chat modal has proper layout for image preview */
+.chat-modal-embedded {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.bot-messages-embedded {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.bot-input-embedded {
+  flex-shrink: 0;
+}
+
+/* Bot Image Display Styles within bot messages - Higher specificity */
+.bot-messages-embedded .bot-message .bot-images-embedded,
+.bot-message .bot-images-embedded {
+  margin: 12px 0 0 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.bot-messages-embedded .bot-message .bot-image-item-embedded,
+.bot-message .bot-image-item-embedded {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.bot-messages-embedded .bot-message .bot-image-embedded,
+.bot-message .bot-image-embedded {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  border-radius: 8px !important;
+  border: 1px solid #e0e0e0 !important;
+  transition: all 0.3s ease !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  display: block !important;
+  box-sizing: border-box !important;
+}
+
+.bot-message .bot-image:hover,
+.bot-message .bot-image-embedded:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+
+
+/* Fallback styles for bot images - Ensure they always display */
+.bot-images-embedded {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 10px 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.bot-image-item-embedded {
+  display: flex !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.bot-image-embedded {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  border: 2px solid #ff0000 !important; /* Red border for debugging */
+  border-radius: 8px !important;
+  box-sizing: border-box !important;
+}
+
+/* Note: Horizontal scrolling is handled by individual container styles in bot.css */
+
+/* Responsive styles for bot images are handled by the bot-message container */

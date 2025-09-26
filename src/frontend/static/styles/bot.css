@@ -5,7 +5,8 @@
   background-color: #EEE;
   border-radius: 16px;
   box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: block;
 }
 
@@ -20,7 +21,8 @@
 
 
 .bot-messages {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   height: calc(100% - 100px);
   scroll-snap-align: end;
 }
@@ -163,4 +165,72 @@ button[disabled]{
 
 @keyframes shimmer {
   100% {-webkit-mask-position:left}
+}
+
+/* Fallback styles for bot images - Ensure they always display */
+.bot-images {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 10px 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.bot-image-item {
+  display: flex !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.bot-image {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  border: 2px solid #00ff00 !important; /* Green border for debugging */
+  border-radius: 8px !important;
+  box-sizing: border-box !important;
+}
+
+/* Bot image styles within bot messages - Higher specificity */
+.bot-messages .bot-message .bot-images,
+.bot-message .bot-images {
+  margin: 12px 0 0 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.bot-messages .bot-message .bot-image-item,
+.bot-message .bot-image-item {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.bot-messages .bot-message .bot-image,
+.bot-message .bot-image {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  display: block !important;
+  border-radius: 8px !important;
+  border: 1px solid #e0e0e0 !important;
+  box-sizing: border-box !important;
 }

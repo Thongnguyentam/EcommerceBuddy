@@ -421,18 +421,21 @@ Expected outcome: {analysis.get('expected_outcome', 'Provide assistance')}
 Workflow results:
 {json.dumps(step_results, indent=2)}
 
+IMPORTANT: If any step results contain URLs (especially image URLs of visualization), preserve them EXACTLY as they appear in the original results. Do not modify, re-generate, or change any URLs.
+
 Create a natural, helpful response that:
 1. Directly addresses the user's request
 2. Uses the data from the tool results
 3. Is conversational and friendly
 4. Provides actionable information when possible
+5. Preserves all URLs exactly as they appear in the original results
 
 Response:"""
-
+        logger.info(f"===========Step results: {step_results} ===========")
         try:
             response = await self.generate_response(synthesis_prompt)
             return response.strip()
-            
+            logger.info(f"===========Response: {response} ===========")    
         except Exception as e:
             logger.error(f"Response synthesis failed: {str(e)}")
             return "I've processed your request, but encountered an issue generating the response. Please try again."

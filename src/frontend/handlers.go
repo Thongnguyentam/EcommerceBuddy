@@ -25,10 +25,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -653,6 +656,14 @@ func (fe *frontendServer) aiChatHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Log the payload being sent to agent service
+	log.WithFields(logrus.Fields{
+		"message":    chatReq.Message,
+		"user_id":    chatReq.UserID,
+		"session_id": chatReq.SessionID,
+		"context":    chatReq.Context,
+	}).Info("sending payload to agent service")
+
 	// Forward to agent service
 	agentServiceURL := "http://" + fe.shoppingAssistantSvcAddr + "/chat"
 	
@@ -865,4 +876,155 @@ func formatTimestamp(timestamp int64) string {
 		return ""
 	}
 	return time.Unix(timestamp, 0).Format("January 2, 2006")
+}
+
+// Direct GCS Image Upload Handler
+func (fe *frontendServer) uploadImageHandler(w http.ResponseWriter, r *http.Request) {
+	log := r.Context().Value(ctxKeyLog{}).(logrus.FieldLogger)
+	
+	// Parse multipart form (max 10MB)
+	err := r.ParseMultipartForm(10 << 20)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to parse multipart form"), http.StatusBadRequest)
+		return
+	}
+
+	// Get file from form
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to get image file"), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Validate file type
+	contentType := header.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "image/") {
+		renderHTTPError(log, r, w, errors.New("invalid file type, must be an image"), http.StatusBadRequest)
+		return
+	}
+
+	// Get configuration
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	bucketName := os.Getenv("GCS_UPLOADS_BUCKET")
+	if bucketName == "" {
+		bucketName = projectID + "-user-uploads"
+	}
+
+	if projectID == "" {
+		renderHTTPError(log, r, w, errors.New("Google Cloud Project not configured"), http.StatusInternalServerError)
+		return
+	}
+
+	// Create GCS client
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to create GCS client"), http.StatusInternalServerError)
+		return
+	}
+	defer client.Close()
+
+	// Generate unique filename
+	fileExt := filepath.Ext(header.Filename)
+	if fileExt == "" {
+		fileExt = ".jpg" // Default extension
+	}
+	uniqueID := uuid.New().String()[:8]
+	timestamp := time.Now().Format("20060102_150405")
+	fileName := fmt.Sprintf("user_uploads/%s_%s%s", timestamp, uniqueID, fileExt)
+
+	// Get bucket handle
+	bucket := client.Bucket(bucketName)
+	
+	// Create object handle
+	obj := bucket.Object(fileName)
+	
+	// Create writer
+	writer := obj.NewWriter(ctx)
+	writer.ContentType = contentType
+	writer.CacheControl = "public, max-age=86400" // Cache for 24 hours
+
+	// Copy file data to GCS
+	if _, err := io.Copy(writer, file); err != nil {
+		writer.Close()
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to upload to GCS"), http.StatusInternalServerError)
+		return
+	}
+
+	// Close writer to finalize upload
+	if err := writer.Close(); err != nil {
+		renderHTTPError(log, r, w, errors.Wrap(err, "failed to finalize GCS upload"), http.StatusInternalServerError)
+		return
+	}
+
+	// Make the object publicly readable and return public URL
+	// This is simpler than signed URLs and works for our use case
+	if err := obj.ACL().Set(ctx, storage.AllUsers, storage.RoleReader); err != nil {
+		log.WithError(err).Warn("failed to make object public, trying signed URL fallback")
+		
+		// Fallback: try signed URL (may fail if credentials aren't properly configured)
+		signedURL, signErr := bucket.SignedURL(fileName, &storage.SignedURLOptions{
+			Method:  "GET",
+			Expires: time.Now().Add(2 * time.Hour),
+		})
+		if signErr != nil {
+			// If both public ACL and signed URL fail, return a direct GCS URL
+			// This will work if the bucket has public read access
+			publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucketName, fileName)
+			log.WithField("public_url", publicURL).Info("using direct GCS URL as fallback")
+			
+			response := map[string]interface{}{
+				"success":   true,
+				"image_url": publicURL,
+				"filename":  header.Filename,
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				log.WithError(err).Error("failed to encode upload response")
+			}
+			return
+		}
+		
+		// Use signed URL
+		log.WithFields(logrus.Fields{
+			"bucket":     bucketName,
+			"filename":   fileName,
+			"signed_url": signedURL,
+		}).Info("image uploaded to GCS with signed URL")
+
+		response := map[string]interface{}{
+			"success":   true,
+			"image_url": signedURL,
+			"filename":  header.Filename,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.WithError(err).Error("failed to encode upload response")
+		}
+		return
+	}
+
+	// Object is now public, use public URL
+	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucketName, fileName)
+
+	log.WithFields(logrus.Fields{
+		"bucket":     bucketName,
+		"filename":   fileName,
+		"public_url": publicURL,
+	}).Info("image uploaded to GCS successfully")
+
+	// Return the public GCS URL
+	response := map[string]interface{}{
+		"success":   true,
+		"image_url": publicURL,
+		"filename":  header.Filename,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.WithError(err).Error("failed to encode upload response")
+	}
 }

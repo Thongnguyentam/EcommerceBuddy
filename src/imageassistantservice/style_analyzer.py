@@ -5,7 +5,7 @@ from google.genai.types import HttpOptions
 import vertexai
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.DEBUG)
 class StyleAnalyzer:
     """LLM-backed style/scene resolver using Google GenAI SDK (Gemini)."""
 
@@ -18,7 +18,7 @@ class StyleAnalyzer:
             vertexai.init(project=self.project_id, location=self.location)
             client = genai.Client(vertexai=True, project=self.project_id, location=self.location)
             self.client = client
-            logger.info("✅ Initialized Google GenAI client for style analysis")
+            logger.debug("✅ Initialized Google GenAI client for style analysis")
         except Exception as e:
             self.client = None
             logger.error(f"❌ Failed to init GenAI client: {e}")
@@ -60,10 +60,26 @@ class StyleAnalyzer:
         try:
             loop = asyncio.get_event_loop()
             resp = await loop.run_in_executor(None, _call)
-            print("=========== resp ===========", resp)
-            # New SDK returns Pydantic objects; .text will be JSON string here
-            text = getattr(resp, "text", None) or getattr(resp, "candidates", [{}])[0].content.parts[0].text
-            print("=========== text ===========", text)
+            logger.debug(f"Raw Gemini response: {resp}")
+            
+            # Handle different response structures
+            text = None
+            if hasattr(resp, 'text'):
+                text = resp.text
+            elif hasattr(resp, 'candidates') and resp.candidates:
+                candidate = resp.candidates[0]
+                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                    if candidate.content.parts:
+                        text = candidate.content.parts[0].text
+                elif hasattr(candidate, 'text'):
+                    text = candidate.text
+            
+            if not text:
+                logger.error("No text content found in Gemini response")
+                return self._fallback_analysis(labels, colors)
+            
+            logger.debug(f"Extracted text from Gemini: {text[:200]}...")
+            
             # Clean the response - remove markdown code blocks
             cleaned_text = text.strip()
             if cleaned_text.startswith("```json"):
@@ -73,9 +89,12 @@ class StyleAnalyzer:
             if cleaned_text.endswith("```"):
                 cleaned_text = cleaned_text[:-3]  # Remove closing ```
             cleaned_text = cleaned_text.strip()
+            
+            logger.debug(f"Cleaned text for JSON parsing: {cleaned_text[:200]}...")
 
             data = json.loads(cleaned_text)
-            logger.info("STYLE ANALYSIS DATA FROM GEMINI: ", data)
+            logger.info(f"STYLE ANALYSIS DATA FROM GEMINI: {data}")
+            
             # Basic validation / defaults
             return {
                 "scene_type": data.get("scene_type", "general"),
@@ -83,6 +102,10 @@ class StyleAnalyzer:
                 "tags": data.get("tags", [])[:8],
                 "confidence": float(data.get("confidence", 0.7))
             }
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing failed for Gemini response: {e}")
+            logger.error(f"Raw text that failed to parse: {cleaned_text[:500] if 'cleaned_text' in locals() else 'N/A'}")
+            return self._fallback_analysis(labels, colors)
         except Exception as e:
             logger.error(f"Gemini style analysis failed: {e}")
             return self._fallback_analysis(labels, colors)
@@ -90,7 +113,7 @@ class StyleAnalyzer:
     # --- simple fallback if LLM unavailable ---
     def _fallback_analysis(self, labels: List[str], colors: List[str]) -> Dict[str, Any]:
         """Fallback analysis when Gemini is not available."""
-        logger.info("Using fallback style analysis")
+        logger.debug("Using fallback style analysis")
         
         # Basic scene type detection
         scene_type = self._detect_scene_type_basic(labels)

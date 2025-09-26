@@ -152,7 +152,7 @@ Context Analysis:
                 ],
                 "response_strategy": "Show available currencies"
             }
-        
+    
     async def _generate_currency_response(self, original_message: str, results: List[Dict[str, Any]], 
                                         tool_plan: Dict[str, Any]) -> str:
         """Return raw tool results instead of generating a natural response."""

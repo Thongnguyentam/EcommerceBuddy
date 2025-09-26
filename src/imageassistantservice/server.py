@@ -108,10 +108,10 @@ class ImageAssistantServicer(imageassistant_pb2_grpc.ImageAssistantServiceServic
             result = await self.product_visualizer.visualize_product(visualize_request)
             
             # Convert to protobuf response
-                proto_metadata = imageassistant_pb2.RenderMetadata(
-                latency_ms=result.metadata.latency_ms,
-                seed=result.metadata.seed or ""
-                )
+            proto_metadata = imageassistant_pb2.RenderMetadata(
+            latency_ms=result.metadata.latency_ms,
+            seed=result.metadata.seed or ""
+            )
             
             return imageassistant_pb2.VisualizeProductResponse(
                 render_url=result.render_url,
